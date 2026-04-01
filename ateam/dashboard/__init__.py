@@ -1,0 +1,1 @@
+"""A-TEAM web dashboard."""

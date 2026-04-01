@@ -1,0 +1,1790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>A-TEAM Dashboard</title>
+<style>
+  :root {
+    --bg:       #0b0f1a;
+    --surface:  #131929;
+    --surface2: #1a2236;
+    --surface3: #1f2a40;
+    --border:   #243048;
+    --text:     #e2e8f0;
+    --muted:    #64748b;
+    --accent:   #6366f1;
+    --green:    #22c55e;
+    --yellow:   #f59e0b;
+    --red:      #ef4444;
+    --blue:     #3b82f6;
+    --cyan:     #06b6d4;
+    --purple:   #a855f7;
+    --mono:     'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    height: 52px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .logo {
+    font-weight: 800;
+    font-size: 15px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    font-family: var(--mono);
+    flex-shrink: 0;
+  }
+
+  .divider { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; }
+
+  /* Project selector */
+  #project-selector {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+    min-width: 0;
+    max-width: 260px;
+  }
+  #project-selector:hover { border-color: var(--border); background: var(--surface2); }
+
+  #project-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #project-selector .arrow { color: var(--muted); font-size: 10px; flex-shrink: 0; }
+
+  /* Mode badge (clickable) */
+  .mode-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    border: 1px solid;
+    flex-shrink: 0;
+    cursor: pointer;
+    user-select: none;
+    transition: opacity 0.15s;
+  }
+  .mode-badge:hover { opacity: 0.8; }
+  .mode-badge.standard { color: var(--cyan);   border-color: rgba(6,182,212,0.4);   background: rgba(6,182,212,0.08); }
+  .mode-badge.auto     { color: var(--green);  border-color: rgba(34,197,94,0.4);   background: rgba(34,197,94,0.08); }
+  .mode-badge.light    { color: var(--yellow); border-color: rgba(245,158,11,0.4);  background: rgba(245,158,11,0.08); }
+  .mode-badge.yolo     { color: var(--red);    border-color: rgba(239,68,68,0.4);   background: rgba(239,68,68,0.08); }
+  .mode-badge .badge-arrow { font-size: 8px; opacity: 0.7; }
+
+  /* Mode picker dropdown */
+  #mode-picker {
+    display: none;
+    position: absolute;
+    top: 54px;
+    width: 340px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 15px 40px rgba(0,0,0,0.5);
+    z-index: 50;
+    padding: 14px;
+  }
+  #mode-picker.open { display: block; }
+  .mode-picker-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .mode-picker-note {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .mode-pick-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background 0.12s;
+    border: 1px solid transparent;
+    margin-bottom: 4px;
+  }
+  .mode-pick-row:hover { background: var(--surface2); }
+  .mode-pick-row.active { background: var(--surface2); border-color: var(--border); }
+  .mode-pick-name {
+    font-weight: 700;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    width: 64px;
+    flex-shrink: 0;
+  }
+  .mode-standard .mode-pick-name { color: var(--cyan); }
+  .mode-auto     .mode-pick-name { color: var(--green); }
+  .mode-light    .mode-pick-name { color: var(--yellow); }
+  .mode-yolo     .mode-pick-name { color: var(--red); }
+  .mode-pick-desc { font-size: 11px; color: var(--muted); line-height: 1.3; }
+  .mode-pick-check { margin-left: auto; color: var(--accent); font-size: 14px; flex-shrink: 0; }
+
+  #status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 9px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    background: var(--surface2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    transition: all 0.3s;
+    flex-shrink: 0;
+  }
+  #status-badge.running   { color: var(--cyan);   border-color: var(--cyan); }
+  #status-badge.completed { color: var(--green);  border-color: var(--green); }
+  #status-badge.failed    { color: var(--red);    border-color: var(--red); }
+  #status-badge.waiting   { color: var(--yellow); border-color: var(--yellow); }
+
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .status-dot.pulse { animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .header-spacer { flex: 1; }
+
+  .token-counter {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  .token-counter span { color: var(--text); font-weight: 600; }
+  #total-tokens { color: var(--accent); }
+
+  /* New project button */
+  .btn-new {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--accent);
+    background: rgba(99,102,241,0.1);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .btn-new:hover { background: rgba(99,102,241,0.2); }
+
+  #conn-status {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  #conn-status.connected    { color: var(--green); }
+  #conn-status.connecting   { color: var(--yellow); }
+  #conn-status.disconnected { color: var(--red); }
+
+  /* ── Main layout ── */
+  main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Sidebar ── */
+  aside {
+    width: 300px;
+    min-width: 200px;
+    max-width: 400px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  /* Sidebar tabs */
+  .sidebar-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .sidebar-tab {
+    flex: 1;
+    padding: 10px 0;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+  }
+  .sidebar-tab:hover { color: var(--text); }
+  .sidebar-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .tab-content { display: none; flex: 1; overflow-y: auto; flex-direction: column; }
+  .tab-content.active { display: flex; }
+
+  /* ── Projects tab ── */
+  #projects-tab { padding: 8px; gap: 4px; }
+
+  .project-card {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .project-card:hover { border-color: var(--accent); background: var(--surface3); }
+  .project-card.active { border-color: var(--accent); background: rgba(99,102,241,0.1); }
+
+  .project-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .project-card-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .project-card.active .project-card-name { color: var(--accent); }
+
+  .project-status-chip {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 1px 6px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  .chip-running   { background: rgba(6,182,212,0.15);   color: var(--cyan); }
+  .chip-completed { background: rgba(34,197,94,0.15);   color: var(--green); }
+  .chip-failed    { background: rgba(239,68,68,0.15);   color: var(--red); }
+  .chip-waiting   { background: rgba(245,158,11,0.15);  color: var(--yellow); }
+  .chip-unknown   { background: rgba(100,116,139,0.15); color: var(--muted); }
+
+  .project-card-request {
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .project-card-actions {
+    display: none;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .project-card:hover .project-card-actions,
+  .project-card.active .project-card-actions { display: flex; }
+
+  .btn-card {
+    flex: 1;
+    padding: 4px 0;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+  }
+  .btn-card:hover { color: var(--text); border-color: var(--muted); }
+  .btn-card.resume { border-color: rgba(99,102,241,0.5); color: var(--accent); }
+  .btn-card.resume:hover { background: rgba(99,102,241,0.15); }
+  .btn-card.rerun  { border-color: rgba(100,116,139,0.4); }
+  .btn-card:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Live pulse on project cards */
+  .live-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--cyan);
+    animation: pulse 1.5s infinite;
+    flex-shrink: 0;
+  }
+
+  .projects-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    color: var(--muted);
+    gap: 10px;
+    text-align: center;
+  }
+  .projects-empty-icon { font-size: 32px; }
+  .projects-empty-text { font-size: 12px; }
+
+  /* ── Plan tab ── */
+  #plan-tab { padding: 8px 0; }
+
+  .phase-item { padding: 6px 14px 4px; }
+
+  .phase-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 3px;
+  }
+  .phase-label.active { color: var(--cyan); }
+  .phase-label.done   { color: var(--green); }
+
+  .task-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    margin: 1px 0;
+    transition: background 0.15s;
+  }
+  .task-item:hover { background: var(--surface2); }
+  .task-item.active { background: rgba(99,102,241,0.1); }
+
+  .task-icon {
+    width: 14px; height: 14px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    font-size: 10px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .task-info { flex: 1; min-width: 0; }
+  .task-title {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .task-item.pending .task-title   { color: var(--muted); }
+  .task-item.completed .task-title { color: var(--green); }
+  .task-item.rejected .task-title  { color: var(--red); }
+  .task-item.active .task-title    { color: var(--cyan); }
+  .task-meta { font-size: 9px; color: var(--muted); margin-top: 1px; }
+
+  .agent-tag {
+    display: inline-block;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .agent-tag.frontend  { background: rgba(59,130,246,0.2);  color: var(--blue); }
+  .agent-tag.backend   { background: rgba(168,85,247,0.2);  color: var(--purple); }
+  .agent-tag.database  { background: rgba(245,158,11,0.2);  color: var(--yellow); }
+  .agent-tag.devops    { background: rgba(6,182,212,0.2);   color: var(--cyan); }
+  .agent-tag.fullstack { background: rgba(99,102,241,0.2);  color: var(--accent); }
+
+  /* ── Feed ── */
+  section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .feed-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    background: var(--surface);
+  }
+
+  .feed-controls { display: flex; gap: 8px; align-items: center; }
+
+  .btn-sm {
+    padding: 3px 9px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-sm:hover { border-color: var(--accent); color: var(--text); }
+
+  #autoscroll-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--muted);
+    font-size: 11px;
+    cursor: pointer;
+    user-select: none;
+  }
+  #autoscroll-toggle input { cursor: pointer; accent-color: var(--accent); }
+  #autoscroll-toggle.on { color: var(--accent); }
+
+  #feed {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 18px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .entry {
+    display: flex;
+    gap: 10px;
+    padding: 2px 0;
+    border-radius: 4px;
+    margin: 1px 0;
+  }
+  .entry:hover { background: rgba(255,255,255,0.02); }
+
+  .entry-ts {
+    color: var(--muted);
+    flex-shrink: 0;
+    font-size: 10px;
+    padding-top: 2px;
+    min-width: 62px;
+  }
+
+  .entry-body { flex: 1; min-width: 0; }
+
+  .entry-label {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-right: 5px;
+    vertical-align: middle;
+  }
+  .label-agent  { background: rgba(99,102,241,0.2);  color: var(--accent); }
+  .label-tool   { background: rgba(6,182,212,0.2);   color: var(--cyan); }
+  .label-result { background: rgba(100,116,139,0.2); color: var(--muted); }
+  .label-task   { background: rgba(34,197,94,0.2);   color: var(--green); }
+  .label-reject { background: rgba(239,68,68,0.2);   color: var(--red); }
+  .label-phase  { background: rgba(168,85,247,0.2);  color: var(--purple); }
+  .label-check  { background: rgba(245,158,11,0.2);  color: var(--yellow); }
+  .label-system { background: rgba(100,116,139,0.15); color: #94a3b8; }
+
+  .entry-text   { color: var(--text); word-break: break-word; }
+  .entry-muted  { color: var(--muted); }
+  .entry-green  { color: var(--green); }
+  .entry-red    { color: var(--red); }
+  .entry-yellow { color: var(--yellow); }
+  .entry-cyan   { color: var(--cyan); }
+  .entry-accent { color: var(--accent); }
+
+  .result-preview {
+    margin-top: 3px;
+    padding: 5px 9px;
+    background: var(--surface2);
+    border-left: 2px solid var(--border);
+    border-radius: 0 4px 4px 0;
+    color: var(--muted);
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 100px;
+    overflow: hidden;
+  }
+
+  .sep { height: 1px; background: var(--border); margin: 7px 0; opacity: 0.5; }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--muted);
+    gap: 10px;
+  }
+  .empty-state-icon { font-size: 32px; }
+  .empty-state-text { font-size: 12px; }
+
+  /* ── Footer ── */
+  footer {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 7px 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+
+  .token-bar-wrap { flex: 1; display: flex; align-items: center; gap: 9px; }
+  .token-bar-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .token-bar-bg {
+    flex: 1;
+    height: 5px;
+    background: var(--surface2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .token-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--cyan));
+    transition: width 0.4s ease;
+    width: 0%;
+  }
+  .token-stats {
+    display: flex;
+    gap: 14px;
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--muted);
+  }
+  .token-stats b { color: var(--text); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* ── Modal overlay ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    width: 540px;
+    max-width: 95vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+  }
+
+  .modal-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .modal-subtitle {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 24px;
+  }
+
+  .form-group { margin-bottom: 20px; }
+  .form-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+    letter-spacing: 0.3px;
+  }
+  .form-label span { color: var(--muted); font-weight: 400; }
+
+  textarea.form-input, input.form-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+    resize: vertical;
+  }
+  textarea.form-input:focus, input.form-input:focus {
+    border-color: var(--accent);
+  }
+  textarea.form-input { min-height: 90px; }
+
+  /* Mode selector */
+  .mode-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .mode-option {
+    padding: 12px;
+    border-radius: 8px;
+    border: 2px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s;
+    background: var(--surface2);
+  }
+  .mode-option:hover { border-color: var(--border); background: var(--surface3); }
+  .mode-option.selected { border-color: var(--accent); background: rgba(99,102,241,0.1); }
+  .mode-option.selected.mode-auto     { border-color: var(--green);  background: rgba(34,197,94,0.08); }
+  .mode-option.selected.mode-light    { border-color: var(--yellow); background: rgba(245,158,11,0.08); }
+  .mode-option.selected.mode-yolo     { border-color: var(--red);    background: rgba(239,68,68,0.08); }
+  .mode-option.selected.mode-standard { border-color: var(--cyan);   background: rgba(6,182,212,0.08); }
+
+  .mode-option-name {
+    font-weight: 700;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .mode-auto     .mode-option-name { color: var(--green); }
+  .mode-light    .mode-option-name { color: var(--yellow); }
+  .mode-yolo     .mode-option-name { color: var(--red); }
+  .mode-standard .mode-option-name { color: var(--cyan); }
+
+  .mode-option-desc { font-size: 11px; color: var(--muted); line-height: 1.4; }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 24px;
+  }
+
+  .btn-cancel {
+    padding: 8px 18px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-cancel:hover { color: var(--text); border-color: var(--muted); }
+
+  .btn-launch {
+    padding: 8px 22px;
+    border-radius: 7px;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-launch:hover { background: #4f51d8; }
+  .btn-launch:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── Project dropdown (header) ── */
+  .project-dropdown {
+    display: none;
+    position: absolute;
+    top: 54px;
+    left: 60px;
+    width: 300px;
+    max-height: 400px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+    z-index: 50;
+    overflow-y: auto;
+    padding: 6px;
+  }
+  .project-dropdown.open { display: block; }
+
+  .dropdown-project {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .dropdown-project:hover { background: var(--surface2); }
+  .dropdown-project.active { background: rgba(99,102,241,0.1); }
+
+  .dropdown-project-name {
+    font-weight: 600;
+    font-size: 13px;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dropdown-project.active .dropdown-project-name { color: var(--accent); }
+
+  /* ── Checkpoint banner ── */
+  #checkpoint-banner {
+    display: none;
+    background: rgba(245,158,11,0.1);
+    border-top: 2px solid var(--yellow);
+    padding: 12px 18px;
+    flex-shrink: 0;
+  }
+  #checkpoint-banner.visible { display: flex; align-items: flex-start; gap: 14px; }
+
+  .cp-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+  .cp-body { flex: 1; min-width: 0; }
+  .cp-title { font-weight: 700; color: var(--yellow); font-size: 13px; margin-bottom: 3px; }
+  .cp-type  { font-size: 11px; font-family: var(--mono); color: var(--muted); }
+  .cp-summary { font-size: 12px; color: var(--text); margin-top: 4px; }
+  .cp-actions { display: flex; gap: 8px; flex-shrink: 0; align-items: center; }
+
+  .btn-approve {
+    padding: 6px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--green);
+    background: rgba(34,197,94,0.1);
+    color: var(--green);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-approve:hover { background: rgba(34,197,94,0.2); }
+
+  .btn-reject {
+    padding: 6px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--red);
+    background: rgba(239,68,68,0.1);
+    color: var(--red);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-reject:hover { background: rgba(239,68,68,0.2); }
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div class="logo">A-TEAM</div>
+  <div class="divider"></div>
+
+  <!-- Project selector -->
+  <div id="project-selector" onclick="toggleProjectDropdown()">
+    <span id="project-name" style="color:var(--muted)">No project selected</span>
+    <span class="arrow">▾</span>
+  </div>
+
+  <!-- Mode badge (clickable) -->
+  <span id="mode-badge" class="mode-badge" style="display:none" onclick="toggleModePicker(event)">
+    <span id="mode-badge-text"></span>
+    <span class="badge-arrow">▾</span>
+  </span>
+
+  <!-- Status badge -->
+  <div id="status-badge">
+    <span class="status-dot"></span>
+    <span id="status-text">—</span>
+  </div>
+
+  <div class="header-spacer"></div>
+
+  <div class="token-counter">
+    tokens:&nbsp;<span id="total-tokens">0</span>
+    &nbsp;|&nbsp;
+    prompt: <span id="prompt-tokens">0</span>
+    &nbsp;·&nbsp;
+    completion: <span id="completion-tokens">0</span>
+  </div>
+
+  <div class="divider"></div>
+
+  <button class="btn-new" onclick="openNewProject()">＋ New Project</button>
+  <div id="conn-status" class="connecting">⬤ —</div>
+</header>
+
+<!-- Project dropdown (positioned absolutely) -->
+<div id="project-dropdown" class="project-dropdown"></div>
+
+<!-- Mode picker dropdown -->
+<div id="mode-picker">
+  <div class="mode-picker-title">Change mode</div>
+  <div class="mode-pick-row mode-auto"     onclick="pickMode('auto')"    >
+    <span class="mode-pick-name">Auto</span>
+    <span class="mode-pick-desc">No checkpoints · reviews every task</span>
+    <span class="mode-pick-check" id="mc-auto"></span>
+  </div>
+  <div class="mode-pick-row mode-standard" onclick="pickMode('standard')">
+    <span class="mode-pick-name">Standard</span>
+    <span class="mode-pick-desc">Human checkpoints at arch / plan / phases</span>
+    <span class="mode-pick-check" id="mc-standard"></span>
+  </div>
+  <div class="mode-pick-row mode-light"    onclick="pickMode('light')"   >
+    <span class="mode-pick-name">Light</span>
+    <span class="mode-pick-desc">No checkpoints · batch reviews at mid+end</span>
+    <span class="mode-pick-check" id="mc-light"></span>
+  </div>
+  <div class="mode-pick-row mode-yolo"     onclick="pickMode('yolo')"    >
+    <span class="mode-pick-name">Yolo</span>
+    <span class="mode-pick-desc">No checkpoints · no reviews — full speed</span>
+    <span class="mode-pick-check" id="mc-yolo"></span>
+  </div>
+  <div class="mode-picker-note">Takes effect on next run / resume.</div>
+</div>
+
+<!-- ── Main ── -->
+<main>
+
+  <!-- Sidebar -->
+  <aside>
+    <div class="sidebar-tabs">
+      <div class="sidebar-tab active" id="tab-projects" onclick="switchTab('projects')">Projects</div>
+      <div class="sidebar-tab" id="tab-plan" onclick="switchTab('plan')">Plan</div>
+    </div>
+
+    <!-- Projects tab -->
+    <div class="tab-content active" id="projects-tab">
+      <div class="projects-empty" id="projects-empty" style="display:none">
+        <div class="projects-empty-icon">📂</div>
+        <div class="projects-empty-text">No projects yet.<br/>Click <b>+ New Project</b> to start.</div>
+      </div>
+    </div>
+
+    <!-- Plan tab -->
+    <div class="tab-content" id="plan-tab">
+      <div id="phase-tree" style="flex:1;overflow-y:auto">
+        <div class="empty-state" style="height:200px">
+          <div class="empty-state-icon">📋</div>
+          <div class="empty-state-text">Select a project to see the plan</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Feed + checkpoint banner -->
+  <section>
+    <!-- Checkpoint banner (shown when a checkpoint is pending) -->
+    <div id="checkpoint-banner">
+      <div class="cp-icon">⏸</div>
+      <div class="cp-body">
+        <div class="cp-title">Human checkpoint required</div>
+        <div class="cp-type" id="cp-type"></div>
+        <div class="cp-summary" id="cp-summary"></div>
+      </div>
+      <div class="cp-actions">
+        <button class="btn-approve" onclick="resolveCheckpoint(true)">✓ Approve</button>
+        <button class="btn-reject"  onclick="resolveCheckpoint(false)">✗ Reject</button>
+      </div>
+    </div>
+
+    <div class="feed-header">
+      <span>Live Activity</span>
+      <div class="feed-controls">
+        <label id="autoscroll-toggle" class="on">
+          <input type="checkbox" id="autoscroll" checked /> Auto-scroll
+        </label>
+        <button class="btn-sm" onclick="clearFeed()">Clear</button>
+      </div>
+    </div>
+
+    <div id="feed">
+      <div class="empty-state">
+        <div class="empty-state-icon">🤖</div>
+        <div class="empty-state-text">Select or start a project to see activity</div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ── Footer ── -->
+<footer>
+  <div class="token-bar-wrap">
+    <span class="token-bar-label">Token usage</span>
+    <div class="token-bar-bg"><div class="token-bar-fill" id="token-bar"></div></div>
+  </div>
+  <div class="token-stats">
+    <span>Total: <b id="f-total">0</b></span>
+    <span>Prompt: <b id="f-prompt">0</b></span>
+    <span>Completion: <b id="f-completion">0</b></span>
+  </div>
+</footer>
+
+<!-- ── New Project Modal ── -->
+<div class="modal-overlay" id="new-project-modal">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">New Project</div>
+    <div class="modal-subtitle">Describe what you want to build. A-TEAM will architect, plan, and implement it.</div>
+
+    <div class="form-group">
+      <label class="form-label">What do you want to build? <span>*</span></label>
+      <textarea class="form-input" id="np-request" placeholder="e.g. A REST API for a task management app with user auth, PostgreSQL, and a React frontend"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Project name <span>(optional — auto-generated if empty)</span></label>
+      <input class="form-input" id="np-name" type="text" placeholder="e.g. task-manager" />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Mode</label>
+      <div class="mode-grid">
+        <div class="mode-option mode-auto selected" data-mode="auto" onclick="selectMode('auto')">
+          <div class="mode-option-name">Auto</div>
+          <div class="mode-option-desc">No checkpoints · Reviews every task<br/>Recommended for most projects</div>
+        </div>
+        <div class="mode-option mode-standard" data-mode="standard" onclick="selectMode('standard')">
+          <div class="mode-option-name">Standard</div>
+          <div class="mode-option-desc">Human checkpoints at each phase<br/>Most control, slowest</div>
+        </div>
+        <div class="mode-option mode-light" data-mode="light" onclick="selectMode('light')">
+          <div class="mode-option-name">Light</div>
+          <div class="mode-option-desc">No checkpoints · Batch reviews<br/>Faster, fewer tokens</div>
+        </div>
+        <div class="mode-option mode-yolo" data-mode="yolo" onclick="selectMode('yolo')">
+          <div class="mode-option-name">Yolo</div>
+          <div class="mode-option-desc">No checkpoints · No reviews<br/>Maximum speed</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeNewProject()">Cancel</button>
+      <button class="btn-launch" id="launch-btn" onclick="launchProject()">🚀 Launch</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// State
+// ════════════════════════════════════════════════════════════
+const state = {
+  activeProject: null,   // currently viewed project name
+  projectList: [],       // [{name, status, mode, request}]
+  phases: {},            // phase_id -> {name, status}
+  tasks:  {},            // task_id  -> {title, agent_type, status, phase_id, attempts}
+  tokens: { prompt: 0, completion: 0, total: 0 },
+  feedEmpty: true,
+  selectedMode: 'auto',
+  pendingCheckpoint: null,
+};
+
+const MAX_FEED = 600;
+const TOKEN_SOFT_MAX = 500_000;
+
+// ════════════════════════════════════════════════════════════
+// DOM refs
+// ════════════════════════════════════════════════════════════
+const feed          = document.getElementById('feed');
+const phaseTree     = document.getElementById('phase-tree');
+const statusBadge   = document.getElementById('status-badge');
+const statusText    = document.getElementById('status-text');
+const projectName   = document.getElementById('project-name');
+const connStatus    = document.getElementById('conn-status');
+const autoscroll    = document.getElementById('autoscroll');
+const autoscrollLbl = document.getElementById('autoscroll-toggle');
+const modeBadge     = document.getElementById('mode-badge');
+const cpBanner      = document.getElementById('checkpoint-banner');
+
+// ════════════════════════════════════════════════════════════
+// Helpers
+// ════════════════════════════════════════════════════════════
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function ts(isoString) {
+  const d = new Date(isoString);
+  return d.toLocaleTimeString([], { hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+
+function fmtNum(n) {
+  return typeof n === 'number' ? n.toLocaleString() : n;
+}
+
+function clearFeed() {
+  feed.innerHTML = '';
+  state.feedEmpty = true;
+}
+
+// ════════════════════════════════════════════════════════════
+// Tabs
+// ════════════════════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.getElementById(name + '-tab').classList.add('active');
+}
+
+// ════════════════════════════════════════════════════════════
+// Project dropdown (header)
+// ════════════════════════════════════════════════════════════
+function toggleProjectDropdown() {
+  const dd = document.getElementById('project-dropdown');
+  dd.classList.toggle('open');
+  if (dd.classList.contains('open')) renderProjectDropdown();
+}
+
+document.addEventListener('click', e => {
+  const dd = document.getElementById('project-dropdown');
+  const sel = document.getElementById('project-selector');
+  if (!dd.contains(e.target) && !sel.contains(e.target)) {
+    dd.classList.remove('open');
+  }
+});
+
+function renderProjectDropdown() {
+  const dd = document.getElementById('project-dropdown');
+  if (!state.projectList.length) {
+    dd.innerHTML = '<div style="padding:16px;color:var(--muted);font-size:12px;text-align:center">No projects yet</div>';
+    return;
+  }
+  dd.innerHTML = state.projectList.map(p => `
+    <div class="dropdown-project ${p.name === state.activeProject ? 'active' : ''}"
+         onclick="selectProject('${esc(p.name)}')">
+      <div class="dropdown-project-name">${esc(p.name)}</div>
+      <span class="project-status-chip ${chipClass(p.status)}">${p.status}</span>
+    </div>
+  `).join('');
+}
+
+// ════════════════════════════════════════════════════════════
+// Projects sidebar
+// ════════════════════════════════════════════════════════════
+function chipClass(status) {
+  if (!status) return 'chip-unknown';
+  const s = status.toLowerCase();
+  if (s === 'completed') return 'chip-completed';
+  if (s === 'failed')    return 'chip-failed';
+  if (['executing','architecting','planning'].includes(s)) return 'chip-running';
+  if (s.includes('review')) return 'chip-waiting';
+  return 'chip-unknown';
+}
+
+function renderProjectsSidebar() {
+  const tab = document.getElementById('projects-tab');
+  const empty = document.getElementById('projects-empty');
+
+  // Clear old project cards (keep the empty placeholder)
+  tab.querySelectorAll('.project-card').forEach(c => c.remove());
+
+  if (!state.projectList.length) {
+    empty.style.display = 'flex';
+    return;
+  }
+  empty.style.display = 'none';
+
+  state.projectList.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'project-card' + (p.name === state.activeProject ? ' active' : '');
+    card.id = 'pcard-' + p.name;
+
+    const isResumable = !p.is_running && !['completed'].includes(p.status);
+    const resumeDisabled = p.is_running ? 'disabled title="Already running"' : '';
+
+    card.innerHTML = `
+      <div style="cursor:pointer" onclick="selectProject('${esc(p.name)}')">
+        <div class="project-card-header">
+          <div style="display:flex;align-items:center;gap:6px;min-width:0">
+            ${p.is_running ? '<span class="live-dot"></span>' : ''}
+            <div class="project-card-name">${esc(p.name)}</div>
+          </div>
+          <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
+            <span class="mode-badge ${p.mode}" style="font-size:8px;padding:1px 5px">${p.mode}</span>
+            <span class="project-status-chip ${chipClass(p.status)}">${p.status || 'unknown'}</span>
+          </div>
+        </div>
+        <div class="project-card-request">${esc(p.request || '—')}</div>
+      </div>
+      <div class="project-card-actions">
+        ${isResumable
+          ? `<button class="btn-card resume" onclick="resumeProject('${esc(p.name)}',this)" ${resumeDisabled}>▶ Resume</button>`
+          : ''}
+        <button class="btn-card rerun" onclick="rerunProject('${esc(p.name)}',this)">↺ Re-run</button>
+      </div>
+    `;
+    tab.insertBefore(card, empty);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// Select / switch project
+// ════════════════════════════════════════════════════════════
+let evtSource = null;
+let reconnectDelay = 1000;
+
+async function selectProject(name) {
+  if (name === state.activeProject) {
+    document.getElementById('project-dropdown').classList.remove('open');
+    return;
+  }
+
+  state.activeProject = name;
+  document.getElementById('project-dropdown').classList.remove('open');
+
+  // Reset feed + plan
+  clearFeed();
+  state.phases = {};
+  state.tasks  = {};
+  phaseTree.innerHTML = '<div class="empty-state" style="height:200px"><div class="empty-state-icon">⏳</div><div class="empty-state-text">Loading...</div></div>';
+  updateTokens(0, 0, 0);
+  hideCp();
+
+  // Update header
+  const proj = state.projectList.find(p => p.name === name);
+  projectName.textContent = name;
+  projectName.style.color = 'var(--text)';
+  setMode(proj?.mode || 'auto');
+
+  // Load state
+  await loadProjectState(name);
+
+  // Reconnect SSE
+  connectSSE(name);
+
+  // Highlight sidebar
+  renderProjectsSidebar();
+
+  // Switch to plan tab if plan loaded
+  if (Object.keys(state.phases).length > 0) switchTab('plan');
+}
+
+async function loadProjectState(name) {
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(name)}/state`);
+    const data = await res.json();
+    if (data.status) setStatus(data.status);
+    if (data.tokens) updateTokens(data.tokens.prompt||0, data.tokens.completion||0, data.tokens.total||0);
+    if (data.phases?.length > 0) {
+      state.phases = {};
+      state.tasks  = {};
+      for (const ph of data.phases) {
+        state.phases[ph.id] = { name: ph.name, status: ph.status };
+        for (const t of ph.tasks||[]) {
+          state.tasks[t.id] = {
+            title: t.title, agent_type: t.agent_type,
+            status: t.status, phase_id: ph.id, attempts: t.attempts||0,
+          };
+        }
+      }
+      renderTree();
+      switchTab('plan');
+    }
+    // Check for pending checkpoint
+    await checkCheckpoint(name);
+  } catch (e) {
+    console.warn('loadProjectState:', e);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// SSE connection
+// ════════════════════════════════════════════════════════════
+function connectSSE(name) {
+  if (evtSource) { evtSource.close(); evtSource = null; }
+  connStatus.className = 'connecting';
+  connStatus.textContent = '⬤ connecting';
+
+  evtSource = new EventSource(`/api/projects/${encodeURIComponent(name)}/events`);
+
+  evtSource.onopen = () => {
+    connStatus.className = 'connected';
+    connStatus.textContent = '⬤ live';
+    reconnectDelay = 1000;
+  };
+
+  evtSource.onmessage = e => {
+    try {
+      const ev = JSON.parse(e.data);
+      if (ev.type === 'phase.started' && !state.phases[ev.phase_id]) {
+        state.phases[ev.phase_id] = { name: ev.phase_name, status: 'in_progress' };
+      }
+      handleEvent(ev);
+    } catch (err) {
+      console.warn('Event parse error:', err, e.data);
+    }
+  };
+
+  evtSource.onerror = () => {
+    connStatus.className = 'disconnected';
+    connStatus.textContent = '⬤ reconnecting...';
+    evtSource.close();
+    setTimeout(() => {
+      reconnectDelay = Math.min(reconnectDelay * 2, 15000);
+      if (state.activeProject === name) connectSSE(name);
+    }, reconnectDelay);
+  };
+}
+
+// ════════════════════════════════════════════════════════════
+// Status badge
+// ════════════════════════════════════════════════════════════
+const STATUS_MAP = {
+  initialized:         ['', false, '—'],
+  architecting:        ['running', true, 'Architecting'],
+  architecture_review: ['waiting', false, 'Awaiting Review'],
+  planning:            ['running', true, 'Planning'],
+  plan_review:         ['waiting', false, 'Awaiting Review'],
+  executing:           ['running', true, 'Executing'],
+  phase_review:        ['waiting', false, 'Phase Review'],
+  completed:           ['completed', false, 'Completed'],
+  failed:              ['failed', false, 'Failed'],
+};
+
+function setStatus(raw) {
+  const [cls, pulse, label] = STATUS_MAP[raw] || ['', false, raw];
+  statusBadge.className = 'status-badge ' + cls;
+  statusText.textContent = label || raw;
+  const dot = statusBadge.querySelector('.status-dot');
+  pulse ? dot.classList.add('pulse') : dot.classList.remove('pulse');
+
+  // Refresh project list to update chip
+  const p = state.projectList.find(p => p.name === state.activeProject);
+  if (p) { p.status = raw; renderProjectsSidebar(); }
+}
+
+const MODE_DEFAULTS = { standard: 'standard', auto: 'auto', light: 'light', yolo: 'yolo' };
+
+function setMode(mode) {
+  const m = MODE_DEFAULTS[mode] || 'auto';
+  state.currentMode = m;
+  modeBadge.className = 'mode-badge ' + m;
+  document.getElementById('mode-badge-text').textContent = m;
+  modeBadge.style.display = '';
+  // Sync checkmarks in picker
+  ['auto','standard','light','yolo'].forEach(k => {
+    const el = document.getElementById('mc-' + k);
+    if (el) el.textContent = k === m ? '✓' : '';
+    const row = el?.closest('.mode-pick-row');
+    if (row) row.classList.toggle('active', k === m);
+  });
+}
+
+function toggleModePicker(e) {
+  e.stopPropagation();
+  const picker = document.getElementById('mode-picker');
+  // Position below the badge
+  const rect = modeBadge.getBoundingClientRect();
+  picker.style.left = rect.left + 'px';
+  picker.classList.toggle('open');
+}
+
+document.addEventListener('click', e => {
+  const picker = document.getElementById('mode-picker');
+  if (!picker.contains(e.target) && e.target !== modeBadge) {
+    picker.classList.remove('open');
+  }
+});
+
+async function pickMode(mode) {
+  if (!state.activeProject) return;
+  document.getElementById('mode-picker').classList.remove('open');
+  setMode(mode);
+  // Persist to launch.json via API
+  try {
+    await fetch(`/api/projects/${encodeURIComponent(state.activeProject)}/mode`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode }),
+    });
+    // Update local list too
+    const p = state.projectList.find(p => p.name === state.activeProject);
+    if (p) { p.mode = mode; renderProjectsSidebar(); }
+  } catch (err) {
+    console.error('pickMode:', err);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// Tokens
+// ════════════════════════════════════════════════════════════
+function updateTokens(prompt, completion, total) {
+  state.tokens = { prompt, completion, total };
+  document.getElementById('total-tokens').textContent      = fmtNum(total);
+  document.getElementById('prompt-tokens').textContent     = fmtNum(prompt);
+  document.getElementById('completion-tokens').textContent = fmtNum(completion);
+  document.getElementById('f-total').textContent      = fmtNum(total);
+  document.getElementById('f-prompt').textContent     = fmtNum(prompt);
+  document.getElementById('f-completion').textContent = fmtNum(completion);
+  document.getElementById('token-bar').style.width =
+    Math.min(100, (total / TOKEN_SOFT_MAX) * 100) + '%';
+}
+
+// ════════════════════════════════════════════════════════════
+// Feed
+// ════════════════════════════════════════════════════════════
+function addEntry(html) {
+  if (state.feedEmpty) { feed.innerHTML = ''; state.feedEmpty = false; }
+  while (feed.children.length > MAX_FEED) feed.removeChild(feed.firstChild);
+  const d = document.createElement('div');
+  d.innerHTML = html;
+  feed.appendChild(d.firstChild || d);
+  if (autoscroll.checked) feed.scrollTop = feed.scrollHeight;
+}
+
+function addSep() {
+  if (state.feedEmpty) { feed.innerHTML = ''; state.feedEmpty = false; }
+  const el = document.createElement('div');
+  el.className = 'sep';
+  feed.appendChild(el);
+  if (autoscroll.checked) feed.scrollTop = feed.scrollHeight;
+}
+
+function entry(timestamp, labelClass, labelText, bodyHtml) {
+  return `<div class="entry">
+    <span class="entry-ts">${ts(timestamp)}</span>
+    <div class="entry-body">
+      <span class="entry-label ${labelClass}">${labelText}</span>
+      ${bodyHtml}
+    </div>
+  </div>`;
+}
+
+// ════════════════════════════════════════════════════════════
+// Phase tree
+// ════════════════════════════════════════════════════════════
+function renderTree() {
+  if (!Object.keys(state.phases).length) return;
+  phaseTree.innerHTML = '';
+  for (const [pid, ph] of Object.entries(state.phases)) {
+    const phDiv = document.createElement('div');
+    phDiv.className = 'phase-item';
+    phDiv.id = 'ph-' + pid;
+
+    const phLabel = ph.status === 'completed' ? 'done'
+                  : ph.status === 'in_progress' ? 'active' : '';
+    let html = `<div class="phase-label ${phLabel}">`;
+    html += ph.status === 'completed' ? '✓ ' : ph.status === 'in_progress' ? '⟳ ' : '○ ';
+    html += esc(ph.name) + '</div>';
+
+    for (const [tid, t] of Object.entries(state.tasks)) {
+      if (t.phase_id !== pid) continue;
+      const icon = t.status === 'completed' ? '✓'
+                 : t.status === 'rejected'  ? '✗'
+                 : (t.status === 'in_progress' || t.status === 'review') ? '⟳'
+                 : '○';
+      const cls = t.status === 'completed' ? 'completed'
+                : t.status === 'rejected'  ? 'rejected'
+                : (t.status === 'in_progress' || t.status === 'review') ? 'active'
+                : 'pending';
+
+      html += `<div class="task-item ${cls}" id="task-${tid}">
+        <div class="task-icon">${icon}</div>
+        <div class="task-info">
+          <div class="task-title">${esc(t.title)}</div>
+          <div class="task-meta">
+            <span class="agent-tag ${t.agent_type||''}">${t.agent_type||''}</span>
+            ${t.attempts > 1 ? `<span style="margin-left:4px;color:var(--yellow)">attempt ${t.attempts}</span>` : ''}
+          </div>
+        </div>
+      </div>`;
+    }
+
+    phDiv.innerHTML = html;
+    phaseTree.appendChild(phDiv);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// Event handlers
+// ════════════════════════════════════════════════════════════
+const AGENT_COLORS = { architect:'var(--purple)', planner:'var(--yellow)', reviewer:'var(--blue)' };
+function agentColor(a) {
+  if (a && a.startsWith('worker')) return 'var(--cyan)';
+  return AGENT_COLORS[a] || 'var(--accent)';
+}
+
+function handleEvent(ev) {
+  const t = ev.type;
+
+  if (t === 'project.started') {
+    addSep();
+    addEntry(entry(ev.ts, 'label-system', 'start',
+      `<span class="entry-text">Project <b>${esc(ev.project)}</b> started</span>
+       &nbsp;<span class="entry-muted">${esc(ev.request)}</span>`));
+    setStatus('architecting');
+  }
+
+  else if (t === 'status.change') { setStatus(ev.new); }
+
+  else if (t === 'phase.started') {
+    if (state.phases[ev.phase_id]) state.phases[ev.phase_id].status = 'in_progress';
+    addSep();
+    addEntry(entry(ev.ts, 'label-phase', 'phase',
+      `<span class="entry-text" style="color:var(--purple)">▶ ${esc(ev.phase_name)}</span>`));
+    renderTree();
+    switchTab('plan');
+  }
+
+  else if (t === 'phase.completed') {
+    if (state.phases[ev.phase_id]) state.phases[ev.phase_id].status = 'completed';
+    renderTree();
+  }
+
+  else if (t === 'task.started') {
+    if (state.tasks[ev.task_id]) {
+      state.tasks[ev.task_id].status = 'in_progress';
+      state.tasks[ev.task_id].attempts = ev.attempt;
+    }
+    const retry = ev.attempt > 1
+      ? ` <span class="entry-yellow">(retry ${ev.attempt})</span>` : '';
+    addEntry(entry(ev.ts, 'label-task', 'task',
+      `<span class="entry-text">${esc(ev.title)}</span>
+       <span class="agent-tag ${ev.agent_type}" style="margin-left:6px">${ev.agent_type}</span>${retry}`));
+    renderTree();
+  }
+
+  else if (t === 'task.completed') {
+    if (state.tasks[ev.task_id]) state.tasks[ev.task_id].status = 'completed';
+    addEntry(entry(ev.ts, 'label-task', 'done',
+      `<span class="entry-green">✓ ${esc(ev.title)}</span>`));
+    renderTree();
+  }
+
+  else if (t === 'task.rejected') {
+    if (state.tasks[ev.task_id]) state.tasks[ev.task_id].status = 'rejected';
+    addEntry(entry(ev.ts, 'label-reject', 'reject',
+      `<span class="entry-red">✗ ${esc(ev.title)}</span>
+       <div class="result-preview">${esc(ev.feedback)}</div>`));
+    renderTree();
+  }
+
+  else if (t === 'agent.started') {
+    addEntry(entry(ev.ts, 'label-agent', 'agent',
+      `<span style="color:${agentColor(ev.agent)};font-weight:600">${esc(ev.agent)}</span>
+       <span class="entry-muted"> started</span>`));
+  }
+
+  else if (t === 'agent.tool_call') {
+    const toolColor = ev.tool === 'run_command'  ? 'var(--yellow)'
+                    : ev.tool === 'web_search'   ? 'var(--green)'
+                    : ev.tool === 'fetch_url'     ? 'var(--green)'
+                    : ev.tool === 'write_file'    ? 'var(--accent)'
+                    : 'var(--cyan)';
+    addEntry(entry(ev.ts, 'label-tool', 'tool',
+      `<span style="color:${agentColor(ev.agent)}">${esc(ev.agent)}</span>
+       <span class="entry-muted"> → </span>
+       <span style="color:${toolColor};font-weight:600">${esc(ev.tool)}</span>
+       <span class="entry-muted"> ${esc(ev.args)}</span>`));
+  }
+
+  else if (t === 'agent.tool_result') {
+    const preview = ev.result || '';
+    if (preview && preview !== '(no output)') {
+      addEntry(entry(ev.ts, 'label-result', 'result',
+        `<div class="result-preview">${esc(preview)}</div>`));
+    }
+  }
+
+  else if (t === 'agent.completed') {
+    addEntry(entry(ev.ts, 'label-agent', 'done',
+      `<span style="color:${agentColor(ev.agent)};font-weight:600">${esc(ev.agent)}</span>
+       <span class="entry-muted"> finished — ${ev.tool_calls} tool calls · ${ev.iterations} iterations · ${fmtNum(ev.tokens)} tokens</span>`));
+  }
+
+  else if (t === 'tokens.update') {
+    updateTokens(ev.prompt, ev.completion, ev.total);
+  }
+
+  else if (t === 'checkpoint') {
+    addSep();
+    addEntry(entry(ev.ts, 'label-check', 'checkpoint',
+      `<span class="entry-yellow">⏸ Waiting for approval: ${esc(ev.checkpoint_type)}</span>
+       <span class="entry-muted"> — ${esc(ev.message)}</span>`));
+    setStatus('waiting');
+    showCp(ev.checkpoint_type, ev.message);
+  }
+
+  else if (t === 'checkpoint.resolved') {
+    const icon = ev.approved ? '✓' : '✗';
+    const cls  = ev.approved ? 'entry-green' : 'entry-red';
+    addEntry(entry(ev.ts, 'label-check', 'checkpoint',
+      `<span class="${cls}">${icon} ${ev.approved ? 'Approved' : 'Rejected'} (${esc(ev.checkpoint_type)})</span>`));
+    hideCp();
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// Checkpoint banner
+// ════════════════════════════════════════════════════════════
+function showCp(type, summary) {
+  state.pendingCheckpoint = { type, summary };
+  document.getElementById('cp-type').textContent    = type;
+  document.getElementById('cp-summary').textContent = summary;
+  cpBanner.classList.add('visible');
+}
+
+function hideCp() {
+  state.pendingCheckpoint = null;
+  cpBanner.classList.remove('visible');
+}
+
+async function resolveCheckpoint(approved) {
+  if (!state.activeProject) return;
+  try {
+    await fetch(`/api/projects/${encodeURIComponent(state.activeProject)}/checkpoint`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approved }),
+    });
+    hideCp();
+  } catch (e) {
+    console.error('resolveCheckpoint:', e);
+  }
+}
+
+async function checkCheckpoint(name) {
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(name)}/checkpoint`);
+    const cp = await res.json();
+    if (cp.status === 'pending') showCp(cp.type, cp.summary);
+  } catch (e) {}
+}
+
+// ════════════════════════════════════════════════════════════
+// New Project modal
+// ════════════════════════════════════════════════════════════
+function selectMode(mode) {
+  state.selectedMode = mode;
+  document.querySelectorAll('.mode-option').forEach(el => {
+    el.classList.toggle('selected', el.dataset.mode === mode);
+  });
+}
+
+function openNewProject() {
+  document.getElementById('new-project-modal').classList.add('open');
+  document.getElementById('np-request').focus();
+}
+
+function closeNewProject() {
+  document.getElementById('new-project-modal').classList.remove('open');
+  document.getElementById('np-request').value = '';
+  document.getElementById('np-name').value = '';
+  selectMode('auto');
+  document.getElementById('launch-btn').disabled = false;
+  document.getElementById('launch-btn').textContent = '🚀 Launch';
+}
+
+document.getElementById('new-project-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeNewProject();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeNewProject();
+});
+
+async function launchProject() {
+  const request = document.getElementById('np-request').value.trim();
+  if (!request) {
+    document.getElementById('np-request').focus();
+    return;
+  }
+  const name = document.getElementById('np-name').value.trim() || null;
+  const mode = state.selectedMode;
+
+  const btn = document.getElementById('launch-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Launching...';
+
+  try {
+    const res = await fetch('/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request, name, mode }),
+    });
+    const data = await res.json();
+    closeNewProject();
+
+    // Refresh project list then switch to the new project
+    await refreshProjects();
+    await selectProject(data.project_name);
+  } catch (e) {
+    console.error('launch error:', e);
+    btn.disabled = false;
+    btn.textContent = '🚀 Launch';
+    alert('Failed to launch project: ' + e.message);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// Resume / Re-run
+// ════════════════════════════════════════════════════════════
+async function resumeProject(name, btn) {
+  btn.disabled = true;
+  btn.textContent = '⏳ Resuming...';
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(name)}/resume`, { method: 'POST' });
+    const data = await res.json();
+    if (data.already_running) {
+      btn.textContent = '⬤ Running';
+      setTimeout(() => { btn.textContent = '▶ Resume'; btn.disabled = false; }, 2000);
+    } else {
+      // Switch to the project and watch
+      await refreshProjects();
+      await selectProject(name);
+    }
+  } catch (e) {
+    console.error('resumeProject:', e);
+    btn.disabled = false;
+    btn.textContent = '▶ Resume';
+  }
+}
+
+async function rerunProject(name, btn) {
+  const proj = state.projectList.find(p => p.name === name);
+  if (!proj) return;
+  if (proj.is_running) { alert('This project is already running.'); return; }
+
+  // Pre-fill the modal and open it
+  document.getElementById('np-request').value = proj.request || '';
+  document.getElementById('np-name').value = name;
+  selectMode(proj.mode || 'auto');
+  openNewProject();
+}
+
+// ════════════════════════════════════════════════════════════
+// Project list refresh
+// ════════════════════════════════════════════════════════════
+async function refreshProjects() {
+  try {
+    const res = await fetch('/api/projects');
+    state.projectList = await res.json();
+    renderProjectsSidebar();
+    renderProjectDropdown();
+
+    // Update mode badge for active project
+    if (state.activeProject) {
+      const p = state.projectList.find(p => p.name === state.activeProject);
+      if (p) setMode(p.mode);
+    }
+  } catch (e) {
+    console.warn('refreshProjects:', e);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// Boot
+// ════════════════════════════════════════════════════════════
+async function boot() {
+  await refreshProjects();
+
+  // Check if server has a default project (launched with `ateam dashboard <project>`)
+  try {
+    const res = await fetch('/api/workspace');
+    const ws = await res.json();
+    if (ws.default_project) {
+      await selectProject(ws.default_project);
+    }
+  } catch (e) {}
+}
+
+autoscroll.addEventListener('change', () => {
+  autoscrollLbl.className = autoscroll.checked ? 'on' : '';
+  if (autoscroll.checked) feed.scrollTop = feed.scrollHeight;
+});
+
+// Refresh project list + active project state every 5s
+setInterval(async () => {
+  await refreshProjects();
+  if (state.activeProject) {
+    // Sync status from state.json (for when process is no longer streaming)
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(state.activeProject)}/state`);
+      const data = await res.json();
+      if (data.status) setStatus(data.status);
+      if (data.tokens) updateTokens(data.tokens.prompt||0, data.tokens.completion||0, data.tokens.total||0);
+    } catch (e) {}
+  }
+}, 5000);
+
+boot();
+</script>
+
+</body>
+</html>

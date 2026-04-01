@@ -1,0 +1,18 @@
+[llm]
+api_key_env = "OPENROUTER_API_KEY"
+base_url = "https://openrouter.ai/api/v1"
+default_model = "anthropic/claude-sonnet-4"
+
+[llm.agent_models]
+# Override model per agent type (optional, falls back to default_model)
+# architect = "anthropic/claude-sonnet-4"
+# planner = "anthropic/claude-sonnet-4"
+# worker = "anthropic/claude-sonnet-4"
+# reviewer = "anthropic/claude-sonnet-4"
+
+[orchestration]
+max_review_retries = 3
+human_checkpoints = ["architecture", "planning", "phase_complete"]
+
+[tools]
+command_timeout = 120
