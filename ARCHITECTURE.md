@@ -48,6 +48,10 @@ CLI / Dashboard
 - Full resumability (state is serialized to disk between every step)
 - Testability (mock the LLM, test the orchestration logic)
 
+### Intervention Lane
+
+A-TEAM also supports an operator-summoned **InterventionAgent** for maintenance and repair work. The dashboard can pause the main project run, launch the intervention as a separate detached process, and record its lifecycle in `.ateam/intervention.json` plus `.ateam/intervention_history.jsonl`. Intervention runs are manual, audited, and do not automatically resume the orchestrator when they finish.
+
 ---
 
 ## 2. Repository Layout
@@ -104,6 +108,16 @@ A-TEAM/
 ├── README.md                    # User-facing docs
 └── ARCHITECTURE.md              # This file
 ```
+
+Recent additions not shown in the tree above:
+- `ateam/intervention.py` â€” shared helpers for `.ateam/intervention.json` and `.ateam/intervention_history.jsonl`
+- `ateam/agents/intervention.py` â€” operator-summoned maintenance agent
+- `ateam/prompts/intervention.md` â€” prompt contract for repair / sync / cleanup work
+
+Intervention-specific runtime artifacts live alongside the existing `.ateam/` files:
+- `.ateam/intervention.json` â€” current intervention state / lock / summary
+- `.ateam/intervention_history.jsonl` â€” operator instructions and intervention results
+- `.ateam/intervention_run.log` â€” detached subprocess stdout/stderr
 
 ---
 
@@ -477,11 +491,18 @@ DEFAULT_PROJECT: str | None = None  # pre-select on load (ateam dashboard <name>
 | GET | `/api/projects` | List all projects (scans workspace for `.ateam/` dirs) |
 | POST | `/api/run` | Launch new project subprocess |
 | POST | `/api/projects/{name}/resume` | Resume interrupted project |
+| POST | `/api/projects/{name}/stop` | Stop the detached runner for a project |
 | PATCH | `/api/projects/{name}/mode` | Update mode in `launch.json` |
 | GET | `/api/projects/{name}/state` | Read `state.json` |
 | GET | `/api/projects/{name}/events` | SSE event stream |
 | GET | `/api/projects/{name}/checkpoint` | Get pending checkpoint |
 | POST | `/api/projects/{name}/checkpoint` | Approve/reject checkpoint |
+| GET | `/api/projects/{name}/processes` | Inspect tracked runner/intervention PIDs for a project |
+| POST | `/api/projects/{name}/processes/{pid}/kill` | Kill a specific project-associated PID |
+| GET | `/api/projects/{name}/intervention` | Read intervention status and recent intervention history |
+| POST | `/api/projects/{name}/intervention` | Pause the main run if needed and start an intervention |
+| POST | `/api/projects/{name}/complete` | Manually mark a stopped project as completed |
+| DELETE | `/api/projects/{name}` | Delete a stopped project workspace |
 | GET | `/api/projects/{name}/logs` | List agent log files |
 | GET | `/api/projects/{name}/logs/{filename}` | Read a log file |
 
@@ -508,6 +529,11 @@ A project is considered running if `run.log` or `events.jsonl` was modified in t
 ### Frontend (`index.html`)
 
 Single-file vanilla JS, no build step, no dependencies. Served directly by FastAPI. Key pieces:
+
+Newer dashboard controls sit alongside the original project list / SSE / checkpoint features:
+- Process inspector modal for viewing per-project runner/intervention processes and killing a stuck PID
+- Intervention modal for paused repair work against project files or `.ateam` metadata
+- Manual lifecycle controls for stop, finish, rerun/reset, and delete actions
 
 - **Project list** — polls `/api/projects` every 5s, renders project cards with status chips and mode badges
 - **SSE client** — `EventSource` connecting to `/api/projects/{name}/events`, auto-reconnects with exponential backoff, sends byte offset on reconnect
@@ -574,6 +600,19 @@ User clicks "▶ Resume" on a project card
   → state.status is "executing" (or "failed" → reset to "executing")
   → in_progress/review tasks reset to pending
   → execution continues from where it stopped
+```
+
+### Intervention flow
+
+```text
+User clicks "Fix" / "Intervene" in the dashboard
+  -> POST /api/projects/{name}/intervention
+  -> server stops the normal runner first if one is active
+  -> server writes .ateam/intervention.json with active=true
+  -> _spawn_intervention([python, -m, ateam, --intervene, name, --instruction, ...])
+  -> detached intervention process writes intervention_history.jsonl + intervention_run.log
+  -> dashboard polls /api/projects/{name}/intervention for status/history
+  -> operator reviews the result, then decides whether to resume the normal run
 ```
 
 ---

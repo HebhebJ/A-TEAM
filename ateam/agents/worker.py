@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import platform
 from pathlib import Path
 
 from ..config import Config
@@ -76,6 +77,29 @@ class WorkerAgent:
             f"## Task: {task.title}\n\n{task.description}",
         ]
 
+        # Platform awareness — prevents agents from using wrong shell syntax
+        os_name = platform.system()  # "Windows", "Linux", "Darwin"
+        if os_name == "Windows":
+            parts.append(
+                "## Platform: Windows\n\n"
+                "You are running on **Windows**. Use Windows-compatible commands:\n"
+                "- Use `mkdir` (not `mkdir -p`) — Windows mkdir creates parents by default\n"
+                "- Use `copy` / `xcopy` / `powershell Copy-Item` (not `cp`)\n"
+                "- Use `type` or `powershell Get-Content` (not `cat`)\n"
+                "- Use `del` / `rmdir` (not `rm`, `rm -rf`)\n"
+                "- Use `dir` (not `ls`)\n"
+                "- Do NOT use `sed`, `grep`, `awk`, `chmod`, `ln -s` — they don't exist\n"
+                "- Use `powershell` one-liners for text manipulation if needed\n"
+                "- Paths use backslashes `\\` but forward slashes `/` usually work too\n"
+                "- npm/npx/node commands work the same as on Unix\n"
+                "- NEVER delete the whole project or large directories to recover from an error\n"
+                "- NEVER install global packages (`npm install -g`) or kill unrelated processes"
+            )
+        elif os_name == "Darwin":
+            parts.append("## Platform: macOS\n\nYou are running on macOS. Use Unix shell commands.")
+        else:
+            parts.append(f"## Platform: {os_name}\n\nYou are running on Linux. Use Unix shell commands.")
+
         # Load architecture context
         arch_context = self._load_context()
         if arch_context:
@@ -84,9 +108,24 @@ class WorkerAgent:
         if completed_tasks_summary:
             parts.append(f"## Previously Completed Tasks\n\n{completed_tasks_summary}")
 
+        parts.append(
+            "## Safety Constraints\n\n"
+            "- Stay within this task's scope. Do not pre-implement later-phase work just because it appears in the architecture.\n"
+            "- Preserve the existing framework, major version, and style format unless the task or reviewer explicitly asks to change them.\n"
+            "- Prefer targeted file edits over project-wide cleanup.\n"
+            "- Do not delete/recreate the project, remove large directories, install global packages, or kill processes as a recovery tactic."
+        )
+
         if retry_feedback:
             parts.append(
                 f"## IMPORTANT: Reviewer Feedback (fix these issues)\n\n{retry_feedback}"
+            )
+            parts.append(
+                "## Retry Constraints\n\n"
+                "- Fix only the issues called out above.\n"
+                "- Do not reinterpret the task from scratch.\n"
+                "- Do not change framework version, routing strategy, or CSS/SCSS choice unless the reviewer explicitly requires it.\n"
+                "- Do not delete and recreate the project to recover from a rejected review."
             )
 
         return await agent.run("\n\n---\n\n".join(parts))

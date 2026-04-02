@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from datetime import datetime, timezone
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -13,7 +15,16 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 
 from .agents.orchestrator import Orchestrator
+from .agents.intervention import InterventionAgent
 from .config import Config
+from .events import EventBus
+from .intervention import write_intervention_state
+from .llm.openrouter import OpenRouterClient
+from .tools.base import ToolRegistry
+from .tools.file_ops import ReadFileTool, WriteFileTool, ListDirectoryTool
+from .tools.search import SearchFilesTool, SearchContentTool
+from .tools.shell import RunCommandTool
+from .tools.web import WebSearchTool, FetchUrlTool
 
 console = Console()
 
@@ -154,18 +165,23 @@ def _run_dashboard(project_name: str | None, port: int, workspace: str | None) -
 
 def main() -> None:
     """Main CLI entry point."""
+    argv = sys.argv[1:]
+    if argv and argv[0] == "dashboard":
+        dash_parser = argparse.ArgumentParser(
+            prog="ateam dashboard",
+            description="Open the A-TEAM web dashboard",
+        )
+        dash_parser.add_argument("project", nargs="?", help="Project name to pre-select (optional)")
+        dash_parser.add_argument("--port", type=int, default=7842, help="Port (default: 7842)")
+        dash_parser.add_argument("--workspace", help="Workspace directory")
+        dash_args = dash_parser.parse_args(argv[1:])
+        _run_dashboard(dash_args.project, dash_args.port, dash_args.workspace)
+        return
+
     parser = argparse.ArgumentParser(
         prog="ateam",
         description="A-TEAM: Agentic development system",
     )
-
-    subparsers = parser.add_subparsers(dest="subcommand")
-
-    # 'dashboard' subcommand
-    dash_parser = subparsers.add_parser("dashboard", help="Open the web dashboard")
-    dash_parser.add_argument("project", nargs="?", help="Project name to pre-select (optional)")
-    dash_parser.add_argument("--port", type=int, default=7842, help="Port (default: 7842)")
-    dash_parser.add_argument("--workspace", help="Workspace directory")
 
     parser.add_argument(
         "request",
@@ -205,6 +221,14 @@ def main() -> None:
         help="Resume an existing project by name",
     )
     parser.add_argument(
+        "--intervene",
+        help="Run the intervention agent against an existing project by name",
+    )
+    parser.add_argument(
+        "--instruction",
+        help="Operator instruction for intervention mode",
+    )
+    parser.add_argument(
         "--dashboard",
         action="store_true",
         help="Use file-based checkpoint handler (for dashboard-launched runs)",
@@ -215,12 +239,7 @@ def main() -> None:
         help="Enable verbose logging",
     )
 
-    args = parser.parse_args()
-
-    # Handle subcommands
-    if args.subcommand == "dashboard":
-        _run_dashboard(args.project, args.port, getattr(args, "workspace", None))
-        return
+    args = parser.parse_args(argv)
 
     # Set up logging
     log_level = logging.DEBUG if getattr(args, "verbose", False) else logging.INFO
@@ -261,9 +280,135 @@ def main() -> None:
         sys.exit(1)
 
     # Determine project name and request
-    if args.resume:
+    if args.intervene:
+        project_name = args.intervene
+        project_path = config.workspace_dir / project_name
+        if not project_path.exists():
+            console.print(f"[red]Project '{project_name}' not found in {config.workspace_dir}[/red]")
+            sys.exit(1)
+
+        instruction = (args.instruction or args.request or "").strip()
+        if not instruction:
+            console.print(
+                Panel(
+                    "[bold]Intervention Mode[/bold]\n\nDescribe the repair or maintenance action you want A-TEAM to perform.",
+                    title="[bold yellow]A-TEAM Intervention[/bold yellow]",
+                )
+            )
+            try:
+                instruction = input("\nIntervention instruction > ").strip()
+            except (EOFError, KeyboardInterrupt):
+                console.print("\n[yellow]Goodbye![/yellow]")
+                sys.exit(0)
+
+        if not instruction:
+            console.print("[red]No intervention instruction provided.[/red]")
+            sys.exit(1)
+
+        console.print(f"[yellow]Intervening on project '{project_name}'...[/yellow]")
+        async def _run_intervention_once():
+            llm_client = OpenRouterClient(
+                api_key=config.openrouter_api_key,
+                base_url=config.api_base_url,
+                default_model=config.default_model,
+            )
+            tool_registry = ToolRegistry()
+            tool_registry.register(ReadFileTool())
+            tool_registry.register(WriteFileTool())
+            tool_registry.register(ListDirectoryTool())
+            tool_registry.register(SearchFilesTool())
+            tool_registry.register(SearchContentTool())
+            tool_registry.register(RunCommandTool(timeout=config.command_timeout))
+            tool_registry.register(WebSearchTool())
+            tool_registry.register(FetchUrlTool())
+            event_bus = EventBus(project_path)
+            intervention_pid = project_path / ".ateam" / "intervention.pid"
+
+            write_intervention_state(
+                project_path,
+                {
+                    "status": "running",
+                    "active": True,
+                    "pid": os.getpid(),
+                    "started_at": datetime.now(timezone.utc).isoformat(),
+                    "finished_at": "",
+                    "last_instruction": instruction,
+                    "error": "",
+                },
+            )
+
+            try:
+                agent = InterventionAgent(
+                    llm_client=llm_client,
+                    tool_registry=tool_registry,
+                    project_path=project_path,
+                    config=config,
+                    event_bus=event_bus,
+                )
+                result = await agent.run(instruction)
+                write_intervention_state(
+                    project_path,
+                    {
+                        "status": "completed",
+                        "active": False,
+                        "pid": None,
+                        "finished_at": datetime.now(timezone.utc).isoformat(),
+                        "summary": result.content[:4000],
+                        "log_file": result.log_file,
+                    },
+                )
+                if intervention_pid.exists():
+                    intervention_pid.unlink()
+                return result
+            except Exception as exc:
+                event_bus.emit("intervention.failed", error=str(exc))
+                write_intervention_state(
+                    project_path,
+                    {
+                        "status": "failed",
+                        "active": False,
+                        "pid": None,
+                        "finished_at": datetime.now(timezone.utc).isoformat(),
+                        "error": str(exc),
+                    },
+                )
+                if intervention_pid.exists():
+                    intervention_pid.unlink()
+                raise
+            finally:
+                try:
+                    await llm_client.close()
+                except Exception as close_exc:
+                    logging.getLogger(__name__).warning("Intervention cleanup close failed: %s", close_exc)
+
+        try:
+            result = asyncio.run(_run_intervention_once())
+            console.print(
+                Panel(
+                    result.content,
+                    title="[bold yellow]Intervention Complete[/bold yellow]",
+                )
+            )
+            return
+        except KeyboardInterrupt:
+            write_intervention_state(
+                project_path,
+                {
+                    "status": "failed",
+                    "active": False,
+                    "pid": None,
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "error": "Intervention interrupted by user",
+                },
+            )
+            intervention_pid = project_path / ".ateam" / "intervention.pid"
+            if intervention_pid.exists():
+                intervention_pid.unlink()
+            console.print("\n[yellow]Intervention interrupted.[/yellow]")
+            sys.exit(1)
+    elif args.resume:
         project_name = args.resume
-        # Load existing request from state
+        # Load existing request from state, falling back to launch.json
         project_path = config.workspace_dir / project_name
         if not project_path.exists():
             console.print(f"[red]Project '{project_name}' not found in {config.workspace_dir}[/red]")
@@ -271,6 +416,18 @@ def main() -> None:
         from .state.project_state import ProjectState
         state = ProjectState.load(project_path)
         user_request = state.user_request
+        if not user_request:
+            # Fallback: read from launch.json (dashboard-created projects)
+            import json as _json
+            launch_file = project_path / ".ateam" / "launch.json"
+            if launch_file.exists():
+                try:
+                    user_request = _json.loads(launch_file.read_text(encoding="utf-8")).get("request", "")
+                except Exception:
+                    pass
+        if not user_request:
+            console.print(f"[red]Cannot resume '{project_name}': no user request found in state or launch.json[/red]")
+            sys.exit(1)
         console.print(f"[cyan]Resuming project '{project_name}'...[/cyan]")
     elif args.request:
         user_request = args.request

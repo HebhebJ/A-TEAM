@@ -14,6 +14,13 @@ Or launch and manage everything from the web dashboard:
 $ ateam dashboard
 ```
 
+Advanced maintenance:
+
+```bash
+# Run the intervention agent against an existing project
+ateam --intervene my-project --instruction "repair state.json and align docs"
+```
+
 ---
 
 ## How It Works
@@ -131,6 +138,10 @@ The dashboard runs at `http://localhost:7842` and lets you:
 - Watch live agent activity, tool calls, and token usage
 - Browse all projects and switch between them
 - Resume interrupted projects with one click
+- Inspect per-project runner processes and kill a stuck PID
+- Open an intervention session to pause a run and repair project or `.ateam` state
+- Manually mark a working-but-stuck project as finished after stopping its process
+- Delete failed, archived, or test projects directly from the UI
 - Approve or reject checkpoints without touching the terminal
 - Change the run mode per project
 
@@ -153,6 +164,7 @@ Modes control how much human oversight and review happens during a run. Set with
 - `none` — workers run unreviewed. Tasks are auto-approved.
 
 Modes can be changed between runs via the dashboard mode badge (click it).
+In `light` mode, multiple reviewer appearances during a single run are expected because milestone reviews happen at phase midpoints and phase ends.
 
 ---
 
@@ -180,6 +192,7 @@ workspaces/my-project/
 ```
 
 All intermediate artifacts are on disk and human-readable. You can edit any `.ateam/*.md` file between checkpoints to steer the agents.
+Newer dashboard-managed runs may also include `.ateam/intervention.json`, `.ateam/intervention_history.jsonl`, and `.ateam/intervention_run.log` when you use the intervention lane.
 
 ---
 

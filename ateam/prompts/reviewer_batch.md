@@ -45,3 +45,6 @@ Set `overall` to `"REJECT"` if ANY task is rejected.
 - **REJECT** only for real problems: missing functionality, bugs, security issues, standards violations
 - Be specific in rejection feedback — tell the worker exactly what file and what to fix
 - Consider context: tasks earlier in the batch are foundations for later ones
+- Judge each task against its stated scope, not against future-phase deliverables.
+- Do not reject setup/scaffold tasks merely because later-phase files are still placeholders or absent, unless the current task explicitly required those files to be functional now.
+- If the worker added extra out-of-scope work, only reject it when that extra work breaks the current task or introduces contradictions.

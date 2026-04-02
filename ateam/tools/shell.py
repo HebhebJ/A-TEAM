@@ -32,6 +32,18 @@ _SERVER_PATTERNS = [
     r"\b--hot\b",
 ]
 
+_DANGEROUS_PATTERNS = [
+    r"\brmdir\s+/s\s+/q\b",
+    r"\brm\s+-rf\b",
+    r"\bRemove-Item\b.*\b-Recurse\b.*\b-Force\b",
+    r"\brobocopy\b.*\s/mir\b",
+    r"\btaskkill\b",
+    r"\bStop-Process\b",
+    r"\bnpm\s+(?:install|i)\s+-g\b",
+    r"\bpnpm\s+add\s+-g\b",
+    r"\byarn\s+global\b",
+]
+
 
 class RunCommandTool(Tool):
     name = "run_command"
@@ -75,6 +87,14 @@ class RunCommandTool(Tool):
                     "Error: This command starts a long-running server/watcher that never exits "
                     "and cannot be used here. To verify the project builds correctly, "
                     "use 'npm run build' (or equivalent) instead."
+                )
+
+        for pattern in _DANGEROUS_PATTERNS:
+            if re.search(pattern, command, re.IGNORECASE):
+                return (
+                    "Error: This command is blocked because it is destructive or mutates the "
+                    "global environment. Do not delete large directories, kill processes, "
+                    "mirror-delete files, or install global packages from an agent run."
                 )
 
         logger.info("Running command: %s (cwd: %s)", command, cwd)

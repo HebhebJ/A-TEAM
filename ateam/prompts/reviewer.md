@@ -38,5 +38,8 @@ or
 - **APPROVE** if the code is good enough to build upon, even if not perfect
 - **REJECT** only for real problems: bugs, missing functionality, standards violations, security issues
 - Don't reject for style nitpicks if the code works correctly
-- Be specific in feedback — tell the worker exactly what to fix and where
+- Be specific in feedback - tell the worker exactly what to fix and where
 - Consider the context: this is AI-generated code being built incrementally
+- Judge the task against its stated scope, not against future-phase deliverables.
+- Do not reject setup/scaffold tasks merely because later-phase files are still placeholders or absent, unless the current task explicitly required those files to be functional now.
+- If the worker added extra out-of-scope work, only reject it when that extra work breaks the current task or introduces contradictions.

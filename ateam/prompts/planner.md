@@ -58,3 +58,5 @@ Also create a human-readable `.ateam/plan.md` summarizing the plan.
 - **Agent types**: Use `"frontend"`, `"backend"`, `"database"`, or `"devops"`
 - **Descriptions**: Must be specific enough that a developer can implement without guessing. Include file paths, function signatures, data structures
 - **Task IDs**: Use format `phase{N}_task{M}` (e.g., `phase1_task1`, `phase2_task3`)
+- Preserve framework, major version, runtime, and style-format choices exactly as stated in the architecture docs and user request. Do not silently switch Angular 17↔18, CSS↔SCSS, etc.
+- Early scaffold tasks must not require later-phase components/pages to be fully implemented. Keep setup tasks minimal and buildable without pulling future work forward.

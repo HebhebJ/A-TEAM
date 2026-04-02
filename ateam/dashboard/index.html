@@ -360,6 +360,13 @@
   .btn-card.rerun  { border-color: rgba(100,116,139,0.4); }
   .btn-card:disabled { opacity: 0.4; cursor: not-allowed; }
 
+  .btn-card.stop { border-color: rgba(239,68,68,0.5); color: var(--red); }
+  .btn-card.stop:hover { background: rgba(239,68,68,0.15); }
+  .btn-card.finish { border-color: rgba(34,197,94,0.5); color: var(--green); }
+  .btn-card.finish:hover { background: rgba(34,197,94,0.15); }
+  .btn-card.delete { border-color: rgba(239,68,68,0.35); color: #fda4af; }
+  .btn-card.delete:hover { background: rgba(239,68,68,0.12); }
+
   /* Live pulse on project cards */
   .live-dot {
     display: inline-block;
@@ -735,6 +742,147 @@
     margin-top: 24px;
   }
 
+  .process-meta {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+  .process-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .process-pill.launching { color: var(--yellow); border-color: rgba(245,158,11,0.35); }
+  .process-pill.running { color: var(--green); border-color: rgba(34,197,94,0.35); }
+  .process-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+  .process-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface2);
+    padding: 12px;
+  }
+  .process-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .intervention-history {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 180px;
+    max-height: 360px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface2);
+    padding: 12px;
+  }
+  .intervention-entry {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: rgba(15,23,42,0.45);
+  }
+  .intervention-entry.user { border-color: rgba(99,102,241,0.35); }
+  .intervention-entry.assistant { border-color: rgba(34,197,94,0.25); }
+  .intervention-entry.system { border-color: rgba(245,158,11,0.25); }
+  .intervention-entry-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+    font-size: 11px;
+  }
+  .intervention-role {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--muted);
+  }
+  .intervention-entry.user .intervention-role { color: var(--accent); }
+  .intervention-entry.assistant .intervention-role { color: var(--green); }
+  .intervention-entry.system .intervention-role { color: var(--yellow); }
+  .intervention-body {
+    font-size: 12px;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+  }
+  .intervention-meta-line {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .intervention-input {
+    min-height: 110px;
+  }
+  .process-pid {
+    font-family: var(--mono);
+    font-weight: 700;
+    color: var(--text);
+  }
+  .process-tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+  .process-tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .process-tag.alive { color: var(--green); border-color: rgba(34,197,94,0.35); }
+  .btn-card.intervene { border-color: rgba(245,158,11,0.45); color: var(--yellow); }
+  .btn-card.intervene:hover { background: rgba(245,158,11,0.14); }
+  .process-tag.dead { color: var(--red); border-color: rgba(239,68,68,0.35); }
+  .process-tag.tracked { color: var(--cyan); border-color: rgba(6,182,212,0.35); }
+  .process-command {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    white-space: pre-wrap;
+    word-break: break-all;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    margin-top: 8px;
+  }
+  .process-empty {
+    padding: 18px;
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    color: var(--muted);
+    text-align: center;
+    background: rgba(255,255,255,0.02);
+  }
+  .btn-card.proc { border-color: rgba(6,182,212,0.35); color: var(--cyan); }
+  .btn-card.proc:hover { background: rgba(6,182,212,0.12); }
+
   .btn-cancel {
     padding: 8px 18px;
     border-radius: 7px;
@@ -843,6 +991,34 @@
     transition: all 0.15s;
   }
   .btn-reject:hover { background: rgba(239,68,68,0.2); }
+
+  /* ── Crash banner ── */
+  #crash-banner {
+    display: none;
+    background: rgba(239,68,68,0.08);
+    border-top: 2px solid var(--red);
+    padding: 12px 18px;
+    flex-shrink: 0;
+  }
+  #crash-banner.visible { display: flex; align-items: flex-start; gap: 14px; }
+
+  .crash-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; color: var(--red); }
+  .crash-body { flex: 1; min-width: 0; }
+  .crash-title { font-weight: 700; color: var(--red); font-size: 13px; margin-bottom: 3px; }
+  .crash-log {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 150px;
+    overflow-y: auto;
+    margin-top: 6px;
+    padding: 8px;
+    background: var(--surface2);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
 </style>
 </head>
 <body>
@@ -882,6 +1058,9 @@
 
   <div class="divider"></div>
 
+  <button class="btn-new" id="header-intervene-btn" style="display:none" onclick="openInterventionModal()">Intervene</button>
+  <button class="btn-new" id="header-proc-btn" style="display:none" onclick="openProcessModal()">Processes</button>
+  <button class="btn-new" id="header-stop-btn" style="display:none;border-color:var(--red);color:var(--red);background:rgba(239,68,68,0.1)" onclick="stopActiveProject()">■ Stop</button>
   <button class="btn-new" onclick="openNewProject()">＋ New Project</button>
   <div id="conn-status" class="connecting">⬤ —</div>
 </header>
@@ -946,6 +1125,19 @@
 
   <!-- Feed + checkpoint banner -->
   <section>
+    <!-- Crash banner (shown when a project process died unexpectedly) -->
+    <div id="crash-banner">
+      <div class="crash-icon">✗</div>
+      <div class="crash-body">
+        <div class="crash-title">Process crashed</div>
+        <pre class="crash-log" id="crash-log"></pre>
+      </div>
+      <div class="cp-actions">
+        <button class="btn-approve" onclick="resumeFromCrash()">▶ Resume</button>
+        <button class="btn-sm" onclick="hideCrash()">Dismiss</button>
+      </div>
+    </div>
+
     <!-- Checkpoint banner (shown when a checkpoint is pending) -->
     <div id="checkpoint-banner">
       <div class="cp-icon">⏸</div>
@@ -1035,6 +1227,49 @@
       <button class="btn-cancel" onclick="closeNewProject()">Cancel</button>
       <button class="btn-launch" id="launch-btn" onclick="launchProject()">🚀 Launch</button>
     </div>
+</div>
+</div>
+
+<!-- ── Processes Modal ── -->
+<div class="modal-overlay" id="process-modal">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">Project Processes</div>
+    <div class="modal-subtitle" id="process-modal-subtitle">Inspect A-TEAM processes for the selected project and kill a specific PID if the run gets stuck or duplicated.</div>
+
+    <div class="process-meta" id="process-meta"></div>
+    <div class="process-list" id="process-list">
+      <div class="process-empty">No process data loaded yet.</div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeProcessModal()">Close</button>
+      <button class="btn-launch" id="process-refresh-btn" onclick="refreshProcessModal()">Refresh</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Intervention Modal ── -->
+<div class="modal-overlay" id="intervention-modal">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">Project Intervention</div>
+    <div class="modal-subtitle" id="intervention-modal-subtitle">Pause the normal pipeline, inspect maintenance history, and send a targeted repair instruction to the intervention agent.</div>
+
+    <div class="process-meta" id="intervention-meta"></div>
+    <div class="intervention-history" id="intervention-history">
+      <div class="process-empty">No intervention history yet.</div>
+    </div>
+
+    <div class="form-group" style="margin-top:14px">
+      <label class="form-label">Instruction</label>
+      <textarea class="form-input intervention-input" id="intervention-input" placeholder="e.g. Align standards.md with the Angular 18 architecture docs, then explain what changed and whether it is safe to resume."></textarea>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeInterventionModal()">Close</button>
+      <button class="btn-cancel" id="intervention-resume-btn" onclick="resumeAfterIntervention()">Resume Project</button>
+      <button class="btn-launch" id="intervention-refresh-btn" onclick="refreshInterventionModal()">Refresh</button>
+      <button class="btn-launch" id="intervention-send-btn" onclick="sendInterventionInstruction()">Send</button>
+    </div>
   </div>
 </div>
 
@@ -1051,6 +1286,16 @@ const state = {
   feedEmpty: true,
   selectedMode: 'auto',
   pendingCheckpoint: null,
+  processModalProject: null,
+  processDetails: null,
+  interventionModalProject: null,
+  interventionDetails: null,
+  projectsRefreshPromise: null,
+  processRefreshInFlight: false,
+  lastProcessRefreshAt: 0,
+  interventionRefreshInFlight: false,
+  lastInterventionRefreshAt: 0,
+  backgroundPollInFlight: false,
 };
 
 const MAX_FEED = 600;
@@ -1069,6 +1314,8 @@ const autoscroll    = document.getElementById('autoscroll');
 const autoscrollLbl = document.getElementById('autoscroll-toggle');
 const modeBadge     = document.getElementById('mode-badge');
 const cpBanner      = document.getElementById('checkpoint-banner');
+const processModal  = document.getElementById('process-modal');
+const interventionModal = document.getElementById('intervention-modal');
 
 // ════════════════════════════════════════════════════════════
 // Helpers
@@ -1129,7 +1376,7 @@ function renderProjectDropdown() {
     <div class="dropdown-project ${p.name === state.activeProject ? 'active' : ''}"
          onclick="selectProject('${esc(p.name)}')">
       <div class="dropdown-project-name">${esc(p.name)}</div>
-      <span class="project-status-chip ${chipClass(p.status)}">${p.status}</span>
+      <span class="project-status-chip ${chipClass(p.is_intervening ? 'intervening' : (p.is_launching && !p.is_running ? 'starting' : (p.status || 'unknown')))}">${p.is_intervening ? 'intervening' : (p.is_launching && !p.is_running ? 'starting' : (p.status || 'unknown'))}</span>
     </div>
   `).join('');
 }
@@ -1142,7 +1389,7 @@ function chipClass(status) {
   const s = status.toLowerCase();
   if (s === 'completed') return 'chip-completed';
   if (s === 'failed')    return 'chip-failed';
-  if (['executing','architecting','planning'].includes(s)) return 'chip-running';
+  if (['executing','architecting','planning','starting','intervening'].includes(s)) return 'chip-running';
   if (s.includes('review')) return 'chip-waiting';
   return 'chip-unknown';
 }
@@ -1165,30 +1412,57 @@ function renderProjectsSidebar() {
     card.className = 'project-card' + (p.name === state.activeProject ? ' active' : '');
     card.id = 'pcard-' + p.name;
 
-    const isResumable = !p.is_running && !['completed'].includes(p.status);
-    const resumeDisabled = p.is_running ? 'disabled title="Already running"' : '';
+    const displayStatus = p.is_intervening ? 'intervening' : (p.is_launching && !p.is_running ? 'starting' : (p.status || 'unknown'));
+    const isBusy = p.is_running || p.is_launching || p.is_intervening;
+    const isResumable = !isBusy && !['completed'].includes(p.status);
+    const resumeDisabled = isBusy ? 'disabled title="Already running, starting, or intervening"' : '';
 
     card.innerHTML = `
       <div style="cursor:pointer" onclick="selectProject('${esc(p.name)}')">
         <div class="project-card-header">
           <div style="display:flex;align-items:center;gap:6px;min-width:0">
-            ${p.is_running ? '<span class="live-dot"></span>' : ''}
+            ${isBusy ? '<span class="live-dot"></span>' : ''}
             <div class="project-card-name">${esc(p.name)}</div>
           </div>
           <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
             <span class="mode-badge ${p.mode}" style="font-size:8px;padding:1px 5px">${p.mode}</span>
-            <span class="project-status-chip ${chipClass(p.status)}">${p.status || 'unknown'}</span>
+            <span class="project-status-chip ${chipClass(displayStatus)}">${displayStatus}</span>
           </div>
         </div>
         <div class="project-card-request">${esc(p.request || '—')}</div>
       </div>
       <div class="project-card-actions">
+        <button class="btn-card intervene" onclick="openInterventionModal('${esc(p.name)}')">Fix</button>
+        <button class="btn-card proc" onclick="openProcessModal('${esc(p.name)}')">Proc</button>
+        ${p.process_count > 0
+          ? `<button class="btn-card stop" onclick="stopProject('${esc(p.name)}',this)">■ Stop</button>`
+          : ''}
         ${isResumable
           ? `<button class="btn-card resume" onclick="resumeProject('${esc(p.name)}',this)" ${resumeDisabled}>▶ Resume</button>`
           : ''}
         <button class="btn-card rerun" onclick="rerunProject('${esc(p.name)}',this)">↺ Re-run</button>
       </div>
     `;
+    if (!isBusy && !['completed', 'not_started'].includes(p.status)) {
+      const actions = card.querySelector('.project-card-actions');
+      if (actions) {
+        const finishBtn = document.createElement('button');
+        finishBtn.className = 'btn-card finish';
+        finishBtn.textContent = 'Finish';
+        finishBtn.onclick = () => markProjectFinished(p.name, finishBtn);
+        actions.insertBefore(finishBtn, actions.lastElementChild);
+      }
+    }
+    {
+      const actions = card.querySelector('.project-card-actions');
+      if (actions) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn-card delete';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.onclick = () => deleteProject(p.name, deleteBtn);
+        actions.insertBefore(deleteBtn, actions.lastElementChild);
+      }
+    }
     tab.insertBefore(card, empty);
   });
 }
@@ -1228,8 +1502,14 @@ async function selectProject(name) {
   // Reconnect SSE
   connectSSE(name);
 
+  // Check for crash
+  await checkCrash(name);
+
   // Highlight sidebar
   renderProjectsSidebar();
+  updateHeaderInterventionBtn();
+  updateHeaderProcessBtn();
+  updateHeaderStop();
 
   // Switch to plan tab if plan loaded
   if (Object.keys(state.phases).length > 0) switchTab('plan');
@@ -1239,6 +1519,7 @@ async function loadProjectState(name) {
   try {
     const res = await fetch(`/api/projects/${encodeURIComponent(name)}/state`);
     const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to load project state');
     if (data.status) setStatus(data.status);
     if (data.tokens) updateTokens(data.tokens.prompt||0, data.tokens.completion||0, data.tokens.total||0);
     if (data.phases?.length > 0) {
@@ -1312,6 +1593,7 @@ const STATUS_MAP = {
   planning:            ['running', true, 'Planning'],
   plan_review:         ['waiting', false, 'Awaiting Review'],
   executing:           ['running', true, 'Executing'],
+  intervening:         ['running', true, 'Intervening'],
   phase_review:        ['waiting', false, 'Phase Review'],
   completed:           ['completed', false, 'Completed'],
   failed:              ['failed', false, 'Failed'],
@@ -1568,6 +1850,28 @@ function handleEvent(ev) {
        <span class="entry-muted"> finished — ${ev.tool_calls} tool calls · ${ev.iterations} iterations · ${fmtNum(ev.tokens)} tokens</span>`));
   }
 
+  else if (t === 'intervention.started') {
+    addSep();
+    addEntry(entry(ev.ts, 'label-check', 'intervention',
+      `<span class="entry-yellow">⏸ Intervention started</span>
+       <div class="result-preview">${esc(ev.instruction || '')}</div>`));
+    setStatus('intervening');
+  }
+
+  else if (t === 'intervention.completed') {
+    addEntry(entry(ev.ts, 'label-result', 'intervention',
+      `<span class="entry-green">✓ Intervention finished</span>
+       <div class="result-preview">${esc(ev.summary || '')}</div>`));
+    refreshProjects();
+  }
+
+  else if (t === 'intervention.failed') {
+    addEntry(entry(ev.ts, 'label-reject', 'intervention',
+      `<span class="entry-red">✕ Intervention failed</span>
+       <div class="result-preview">${esc(ev.error || '')}</div>`));
+    refreshProjects();
+  }
+
   else if (t === 'tokens.update') {
     updateTokens(ev.prompt, ev.completion, ev.total);
   }
@@ -1655,8 +1959,20 @@ document.getElementById('new-project-modal').addEventListener('click', function(
   if (e.target === this) closeNewProject();
 });
 
+document.getElementById('process-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeProcessModal();
+});
+
+document.getElementById('intervention-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeInterventionModal();
+});
+
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeNewProject();
+  if (e.key === 'Escape') {
+    closeNewProject();
+    closeProcessModal();
+    closeInterventionModal();
+  }
 });
 
 async function launchProject() {
@@ -1676,9 +1992,10 @@ async function launchProject() {
     const res = await fetch('/api/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ request, name, mode }),
+      body: JSON.stringify({ request, name, mode, reset_existing: false }),
     });
     const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to launch project');
     closeNewProject();
 
     // Refresh project list then switch to the new project
@@ -1692,15 +2009,382 @@ async function launchProject() {
   }
 }
 
+function updateHeaderProcessBtn() {
+  const btn = document.getElementById('header-proc-btn');
+  btn.style.display = state.activeProject ? '' : 'none';
+}
+
+function updateHeaderInterventionBtn() {
+  const btn = document.getElementById('header-intervene-btn');
+  btn.style.display = state.activeProject ? '' : 'none';
+}
+
+function renderProcessModal() {
+  const meta = document.getElementById('process-meta');
+  const list = document.getElementById('process-list');
+  const subtitle = document.getElementById('process-modal-subtitle');
+  const projectName = state.processModalProject || state.activeProject;
+  const details = state.processDetails;
+
+  subtitle.textContent = projectName
+    ? `Inspect A-TEAM processes for ${projectName}.`
+    : 'Inspect A-TEAM processes for the selected project.';
+
+  if (!details) {
+    meta.innerHTML = '';
+    list.innerHTML = '<div class="process-empty">Loading process data...</div>';
+    return;
+  }
+
+  const processes = details.processes || [];
+  const launching = !!details.is_launching;
+  meta.innerHTML = `
+    <span class="process-pill ${launching ? 'launching' : 'running'}">${launching ? 'Launch lock active' : 'No launch lock'}</span>
+    <span class="process-pill running">Processes: ${processes.length}</span>
+    ${details.pid_file ? `<span class="process-pill">PID file: ${details.pid_file}</span>` : ''}
+  `;
+
+  if (!processes.length) {
+    const lockText = launching
+      ? 'A launch or resume is still being prepared. Wait a moment, then refresh.'
+      : 'No live A-TEAM process is currently associated with this project.';
+    list.innerHTML = `<div class="process-empty">${esc(lockText)}</div>`;
+    return;
+  }
+
+  list.innerHTML = processes.map(proc => `
+    <div class="process-card">
+      <div class="process-card-header">
+        <div>
+          <div class="process-pid">PID ${proc.pid}</div>
+          <div class="process-tags">
+            <span class="process-tag ${proc.alive ? 'alive' : 'dead'}">${proc.alive ? 'alive' : 'dead'}</span>
+            ${proc.tracked ? '<span class="process-tag tracked">pid file</span>' : ''}
+            ${proc.kind ? `<span class="process-tag">${esc(proc.kind)}</span>` : ''}
+            <span class="process-tag">${esc(proc.name || 'python')}</span>
+          </div>
+        </div>
+        <button class="btn-card stop" onclick="killProjectProcess(${proc.pid})">Kill</button>
+      </div>
+      <div class="process-command">${esc(proc.command || '(no command line available)')}</div>
+    </div>
+  `).join('');
+}
+
+async function refreshProcessModal(silent = false) {
+  const projectName = state.processModalProject || state.activeProject;
+  if (!projectName || state.processRefreshInFlight) return;
+
+  state.processModalProject = projectName;
+  state.processRefreshInFlight = true;
+  document.getElementById('process-refresh-btn').disabled = true;
+  document.getElementById('process-refresh-btn').textContent = 'Refreshing...';
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/processes`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to load process info');
+    state.processDetails = data;
+    renderProcessModal();
+  } catch (e) {
+    state.processDetails = { processes: [], is_launching: false, pid_file: null };
+    renderProcessModal();
+    if (!silent) alert('Failed to load process info: ' + e.message);
+  } finally {
+    state.lastProcessRefreshAt = Date.now();
+    state.processRefreshInFlight = false;
+    document.getElementById('process-refresh-btn').disabled = false;
+    document.getElementById('process-refresh-btn').textContent = 'Refresh';
+  }
+}
+
+async function openProcessModal(name = state.activeProject) {
+  if (!name) return;
+  state.processModalProject = name;
+  state.processDetails = null;
+  processModal.classList.add('open');
+  renderProcessModal();
+  await refreshProcessModal();
+}
+
+function closeProcessModal() {
+  processModal.classList.remove('open');
+}
+
+function renderInterventionModal() {
+  const meta = document.getElementById('intervention-meta');
+  const list = document.getElementById('intervention-history');
+  const subtitle = document.getElementById('intervention-modal-subtitle');
+  const resumeBtn = document.getElementById('intervention-resume-btn');
+  const sendBtn = document.getElementById('intervention-send-btn');
+  const input = document.getElementById('intervention-input');
+  const projectName = state.interventionModalProject || state.activeProject;
+  const details = state.interventionDetails;
+
+  subtitle.textContent = projectName
+    ? `Pause automation for ${projectName}, send a targeted repair instruction, and review the intervention history.`
+    : 'Pause automation and send a targeted repair instruction.';
+
+  if (!details) {
+    meta.innerHTML = '';
+    list.innerHTML = '<div class="process-empty">Loading intervention state...</div>';
+    resumeBtn.disabled = true;
+    sendBtn.disabled = true;
+    input.disabled = true;
+    return;
+  }
+
+  const interventionState = details.state || {};
+  const history = details.history || [];
+  const active = !!interventionState.active;
+  const interrupted = !!interventionState.interrupted_run;
+  meta.innerHTML = `
+    <span class="process-pill ${active ? 'launching' : 'running'}">${active ? 'Intervention active' : 'Intervention idle'}</span>
+    <span class="process-pill">${esc(interventionState.status || 'idle')}</span>
+    ${interventionState.pid ? `<span class="process-pill">PID: ${interventionState.pid}</span>` : ''}
+    ${interrupted ? `<span class="process-pill launching">Paused run${interventionState.interrupted_pid ? ` (${interventionState.interrupted_pid})` : ''}</span>` : ''}
+  `;
+
+  if (!history.length) {
+    list.innerHTML = '<div class="process-empty">No intervention history yet.</div>';
+  } else {
+    list.innerHTML = history.map(item => {
+      const role = item.role || 'system';
+      const kind = item.kind || 'message';
+      const metaLine = item.meta
+        ? `<div class="intervention-meta-line">${esc(JSON.stringify(item.meta))}</div>`
+        : '';
+      return `
+        <div class="intervention-entry ${esc(role)}">
+          <div class="intervention-entry-header">
+            <span class="intervention-role">${esc(role)} · ${esc(kind)}</span>
+            <span class="entry-ts">${ts(item.ts)}</span>
+          </div>
+          <div class="intervention-body">${esc(item.content || '')}</div>
+          ${metaLine}
+        </div>
+      `;
+    }).join('');
+  }
+
+  resumeBtn.disabled = active;
+  sendBtn.disabled = active;
+  input.disabled = active;
+}
+
+async function refreshInterventionModal(silent = false) {
+  const projectName = state.interventionModalProject || state.activeProject;
+  if (!projectName || state.interventionRefreshInFlight) return;
+
+  state.interventionModalProject = projectName;
+  state.interventionRefreshInFlight = true;
+  document.getElementById('intervention-refresh-btn').disabled = true;
+  document.getElementById('intervention-refresh-btn').textContent = 'Refreshing...';
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/intervention`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to load intervention info');
+    state.interventionDetails = data;
+    renderInterventionModal();
+  } catch (e) {
+    state.interventionDetails = { state: { status: 'failed', active: false, error: e.message }, history: [] };
+    renderInterventionModal();
+    if (!silent) alert('Failed to load intervention info: ' + e.message);
+  } finally {
+    state.lastInterventionRefreshAt = Date.now();
+    state.interventionRefreshInFlight = false;
+    document.getElementById('intervention-refresh-btn').disabled = false;
+    document.getElementById('intervention-refresh-btn').textContent = 'Refresh';
+  }
+}
+
+async function openInterventionModal(name = state.activeProject) {
+  if (!name) return;
+  state.interventionModalProject = name;
+  state.interventionDetails = null;
+  interventionModal.classList.add('open');
+  renderInterventionModal();
+  await refreshInterventionModal();
+}
+
+function closeInterventionModal() {
+  interventionModal.classList.remove('open');
+}
+
+async function sendInterventionInstruction() {
+  const projectName = state.interventionModalProject || state.activeProject;
+  const input = document.getElementById('intervention-input');
+  const instruction = input.value.trim();
+  if (!projectName || !instruction) {
+    if (!instruction) input.focus();
+    return;
+  }
+
+  const sendBtn = document.getElementById('intervention-send-btn');
+  sendBtn.disabled = true;
+  sendBtn.textContent = 'Sending...';
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/intervention`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instruction }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to start intervention');
+    input.value = '';
+    await refreshProjects();
+    await refreshInterventionModal();
+    if (state.activeProject === projectName) {
+      setStatus('intervening');
+      updateHeaderStop();
+    }
+  } catch (e) {
+    alert('Failed to start intervention: ' + e.message);
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Send';
+  }
+}
+
+async function resumeAfterIntervention() {
+  const projectName = state.interventionModalProject || state.activeProject;
+  if (!projectName) return;
+  closeInterventionModal();
+  if (state.activeProject !== projectName) {
+    await selectProject(projectName);
+  }
+  const p = state.projectList.find(item => item.name === projectName);
+  if (p && p.is_intervening) {
+    alert('The intervention is still active. Wait for it to finish before resuming.');
+    return;
+  }
+  const fakeBtn = document.getElementById('intervention-resume-btn');
+  await resumeProject(projectName, fakeBtn);
+}
+
+async function killProjectProcess(pid) {
+  const projectName = state.processModalProject || state.activeProject;
+  if (!projectName) return;
+  const ok = confirm(`Kill PID ${pid} for project "${projectName}"?`);
+  if (!ok) return;
+
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/processes/${pid}/kill`, {
+      method: 'POST',
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to kill process');
+    await refreshProjects();
+    await refreshProcessModal();
+    if (state.activeProject === projectName) {
+      updateHeaderStop();
+      await checkCrash(projectName);
+    }
+  } catch (e) {
+    alert('Failed to kill process: ' + e.message);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// Crash detection
+// ════════════════════════════════════════════════════════════
+function showCrash(errorTail) {
+  document.getElementById('crash-log').textContent = errorTail || '(no output captured)';
+  document.getElementById('crash-banner').classList.add('visible');
+}
+
+function hideCrash() {
+  document.getElementById('crash-banner').classList.remove('visible');
+}
+
+async function resumeFromCrash() {
+  hideCrash();
+  if (!state.activeProject) return;
+  const btn = document.querySelector('#crash-banner .btn-approve');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Resuming...'; }
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(state.activeProject)}/resume`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to resume project');
+    await refreshProjects();
+    if (btn) { btn.disabled = false; btn.textContent = '▶ Resume'; }
+  } catch (e) {
+    console.error('resumeFromCrash:', e);
+    alert('Failed to resume project: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '▶ Resume'; }
+  }
+}
+
+async function checkCrash(name) {
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(name)}/status`);
+    const data = await res.json();
+    if (data.crashed && data.error_tail) {
+      showCrash(data.error_tail);
+    } else {
+      hideCrash();
+    }
+  } catch (e) {}
+}
+
 // ════════════════════════════════════════════════════════════
 // Resume / Re-run
 // ════════════════════════════════════════════════════════════
+function updateHeaderStop() {
+  const btn = document.getElementById('header-stop-btn');
+  if (!state.activeProject) { btn.style.display = 'none'; return; }
+  const p = state.projectList.find(p => p.name === state.activeProject);
+  btn.style.display = (p && p.process_count > 0) ? '' : 'none';
+}
+
+async function stopActiveProject() {
+  if (!state.activeProject) return;
+  const btn = document.getElementById('header-stop-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Stopping...';
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(state.activeProject)}/stop`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to stop project');
+    btn.textContent = '■ Stopped';
+    setTimeout(async () => {
+      await refreshProjects();
+      updateHeaderStop();
+      btn.textContent = '■ Stop';
+      btn.disabled = false;
+    }, 2000);
+  } catch (e) {
+    console.error('stopActiveProject:', e);
+    alert('Failed to stop project: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = '■ Stop';
+  }
+}
+
+async function stopProject(name, btn) {
+  btn.disabled = true;
+  btn.textContent = '⏳ Stopping...';
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(name)}/stop`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to stop project');
+    btn.textContent = '■ Stopped';
+    // Refresh project list after a short delay to let the process die
+    setTimeout(async () => { await refreshProjects(); }, 2000);
+  } catch (e) {
+    console.error('stopProject:', e);
+    alert('Failed to stop project: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = '■ Stop';
+  }
+}
+
 async function resumeProject(name, btn) {
   btn.disabled = true;
   btn.textContent = '⏳ Resuming...';
   try {
     const res = await fetch(`/api/projects/${encodeURIComponent(name)}/resume`, { method: 'POST' });
     const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to resume project');
     if (data.already_running) {
       btn.textContent = '⬤ Running';
       setTimeout(() => { btn.textContent = '▶ Resume'; btn.disabled = false; }, 2000);
@@ -1711,41 +2395,156 @@ async function resumeProject(name, btn) {
     }
   } catch (e) {
     console.error('resumeProject:', e);
+    alert('Failed to resume project: ' + e.message);
     btn.disabled = false;
     btn.textContent = '▶ Resume';
+  }
+}
+
+async function markProjectFinished(name, btn) {
+  const confirmed = confirm(
+    `Mark project "${name}" as finished?\n\n` +
+    'This is a manual override. It will mark the project and any remaining tasks/phases as completed.\n\n' +
+    'Stop the project process first if it is still running.'
+  );
+  if (!confirmed) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Finishing...';
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(name)}/complete`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to mark project as finished');
+    hideCrash();
+    await refreshProjects();
+    if (state.activeProject === name) {
+      await loadProjectState(name);
+      setStatus('completed');
+      renderTree();
+      updateHeaderStop();
+    }
+  } catch (e) {
+    console.error('markProjectFinished:', e);
+    alert('Failed to mark project as finished: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Finish';
+  }
+}
+
+async function deleteProject(name, btn) {
+  const confirmed = confirm(
+    `Delete project "${name}" permanently?\n\n` +
+    'This removes the entire workspace folder for that project and cannot be undone.\n\n' +
+    'The project must be stopped first.'
+  );
+  if (!confirmed) return;
+
+  const typed = prompt(`Type the project name to confirm deletion:\n\n${name}`);
+  if (typed !== name) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Deleting...';
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to delete project');
+
+    if (state.activeProject === name) {
+      if (evtSource) {
+        evtSource.close();
+        evtSource = null;
+      }
+      state.activeProject = null;
+      state.phases = {};
+      state.tasks = {};
+      clearFeed();
+      hideCrash();
+      hideCp();
+      phaseTree.innerHTML = '<div class="empty-state" style="height:200px"><div class="empty-state-icon">📁</div><div class="empty-state-text">Select a project</div></div>';
+      updateTokens(0, 0, 0);
+      projectName.textContent = 'Select project';
+      setStatus('initialized');
+      updateHeaderInterventionBtn();
+      updateHeaderProcessBtn();
+      updateHeaderStop();
+    }
+
+    await refreshProjects();
+
+    if (!state.activeProject && state.projectList.length) {
+      await selectProject(state.projectList[0].name);
+    }
+  } catch (e) {
+    console.error('deleteProject:', e);
+    alert('Failed to delete project: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Delete';
   }
 }
 
 async function rerunProject(name, btn) {
   const proj = state.projectList.find(p => p.name === name);
   if (!proj) return;
-  if (proj.is_running) { alert('This project is already running.'); return; }
+  if (proj.is_running || proj.is_launching) { alert('This project is already running or starting.'); return; }
+  const confirmed = confirm(
+    `Reset project "${name}" and start a fresh run?\n\n` +
+    'This will archive the current workspace and A-TEAM artifacts before launching a new run.'
+  );
+  if (!confirmed) return;
 
-  // Pre-fill the modal and open it
-  document.getElementById('np-request').value = proj.request || '';
-  document.getElementById('np-name').value = name;
-  selectMode(proj.mode || 'auto');
-  openNewProject();
+  btn.disabled = true;
+  btn.textContent = '⏳ Resetting...';
+
+  try {
+    const res = await fetch('/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        request: proj.request || '',
+        name,
+        mode: proj.mode || 'auto',
+        reset_existing: true,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to re-run project');
+    await refreshProjects();
+    await selectProject(data.project_name);
+  } catch (e) {
+    console.error('rerunProject:', e);
+    alert('Failed to re-run project: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = '↻ Re-run';
+  }
 }
 
 // ════════════════════════════════════════════════════════════
 // Project list refresh
 // ════════════════════════════════════════════════════════════
 async function refreshProjects() {
-  try {
-    const res = await fetch('/api/projects');
-    state.projectList = await res.json();
-    renderProjectsSidebar();
-    renderProjectDropdown();
+  if (state.projectsRefreshPromise) return state.projectsRefreshPromise;
+  state.projectsRefreshPromise = (async () => {
+    try {
+      const res = await fetch('/api/projects');
+      state.projectList = await res.json();
+      renderProjectsSidebar();
+      renderProjectDropdown();
+      updateHeaderInterventionBtn();
+      updateHeaderProcessBtn();
+      updateHeaderStop();
 
-    // Update mode badge for active project
-    if (state.activeProject) {
-      const p = state.projectList.find(p => p.name === state.activeProject);
-      if (p) setMode(p.mode);
+      // Update mode badge for active project
+      if (state.activeProject) {
+        const p = state.projectList.find(p => p.name === state.activeProject);
+        if (p) setMode(p.mode);
+      }
+    } catch (e) {
+      console.warn('refreshProjects:', e);
+    } finally {
+      state.projectsRefreshPromise = null;
     }
-  } catch (e) {
-    console.warn('refreshProjects:', e);
-  }
+  })();
+  return state.projectsRefreshPromise;
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1771,15 +2570,37 @@ autoscroll.addEventListener('change', () => {
 
 // Refresh project list + active project state every 5s
 setInterval(async () => {
-  await refreshProjects();
-  if (state.activeProject) {
-    // Sync status from state.json (for when process is no longer streaming)
-    try {
-      const res = await fetch(`/api/projects/${encodeURIComponent(state.activeProject)}/state`);
-      const data = await res.json();
-      if (data.status) setStatus(data.status);
-      if (data.tokens) updateTokens(data.tokens.prompt||0, data.tokens.completion||0, data.tokens.total||0);
-    } catch (e) {}
+  if (state.backgroundPollInFlight) return;
+  state.backgroundPollInFlight = true;
+  try {
+    await refreshProjects();
+    if (state.activeProject) {
+      // Sync status from state.json (for when process is no longer streaming)
+      try {
+        const res = await fetch(`/api/projects/${encodeURIComponent(state.activeProject)}/state`);
+        const data = await res.json();
+        if (data.status) setStatus(data.status);
+        if (data.tokens) updateTokens(data.tokens.prompt||0, data.tokens.completion||0, data.tokens.total||0);
+        // Check for crash on each poll
+        await checkCrash(state.activeProject);
+        const modalNeedsRefresh =
+          processModal.classList.contains('open') &&
+          state.processModalProject === state.activeProject &&
+          (Date.now() - state.lastProcessRefreshAt) > 15000;
+        if (modalNeedsRefresh) {
+          await refreshProcessModal(true);
+        }
+        const interventionNeedsRefresh =
+          interventionModal.classList.contains('open') &&
+          state.interventionModalProject === state.activeProject &&
+          (Date.now() - state.lastInterventionRefreshAt) > 15000;
+        if (interventionNeedsRefresh) {
+          await refreshInterventionModal(true);
+        }
+      } catch (e) {}
+    }
+  } finally {
+    state.backgroundPollInFlight = false;
   }
 }, 5000);
 

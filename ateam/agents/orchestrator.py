@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from pathlib import Path
 from typing import Callable, Awaitable
 
@@ -91,7 +93,12 @@ class Orchestrator:
             state = ProjectState.create(self.project_name, user_request)
             state.save(self.project_path)
 
-        self.event_bus.project_started(self.project_name, user_request)
+        # Backfill user_request if it was lost (e.g. dashboard launch / crash)
+        if user_request and not state.user_request:
+            state.user_request = user_request
+            state.save(self.project_path)
+
+        self.event_bus.project_started(self.project_name, user_request or state.user_request)
 
         console.print(
             Panel(
@@ -111,6 +118,33 @@ class Orchestrator:
 
     async def _run_from_state(self, state: ProjectState, user_request: str) -> None:
         """Resume execution from the current state."""
+
+        # --- Safety: validate required outputs exist before continuing past a stage ---
+        # Only reset if we're already INTO a later stage (not just at review).
+        # architecture_review means architect finished — let the checkpoint handle it.
+        if state.status in ("planning", "plan_review", "executing"):
+            missing_arch = self._validate_stage_outputs(self.ARCHITECT_REQUIRED_FILES)
+            if missing_arch:
+                console.print(
+                    f"[bold yellow]Architecture files missing ({missing_arch}) "
+                    f"but status is '{state.status}' — resetting to re-run architect.[/bold yellow]"
+                )
+                if self.event_bus:
+                    self.event_bus.emit("validation.failed", stage="architect", missing_files=missing_arch)
+                state.transition("initialized")
+                state.save(self.project_path)
+
+        if state.status in ("executing",) and not state.phases:
+            missing_plan = self._validate_stage_outputs(self.PLANNER_REQUIRED_FILES)
+            if missing_plan:
+                console.print(
+                    f"[bold yellow]Plan missing ({missing_plan}) and no phases in state "
+                    f"— resetting to re-run planner.[/bold yellow]"
+                )
+                if self.event_bus:
+                    self.event_bus.emit("validation.failed", stage="planner", missing_files=missing_plan)
+                state.transition("planning")
+                state.save(self.project_path)
 
         # --- ARCHITECTURE ---
         if state.status in ("initialized", "architecting"):
@@ -164,6 +198,23 @@ class Orchestrator:
             state.save(self.project_path)
 
         if state.status == "executing":
+            issues = self._execution_consistency_issues(state)
+            if issues:
+                console.print(
+                    "[bold red]Execution context is inconsistent. Refusing to continue until "
+                    "state, plan, and docs are aligned.[/bold red]"
+                )
+                for issue in issues:
+                    console.print(f"  [red]- {issue}[/red]")
+                if self.event_bus:
+                    self.event_bus.emit(
+                        "validation.failed",
+                        stage="execution_context",
+                        issues=issues,
+                    )
+                state.transition("failed")
+                state.save(self.project_path)
+                return
             await self._run_execution(state)
 
         # --- DONE ---
@@ -175,6 +226,10 @@ class Orchestrator:
                     title="[bold blue]A-TEAM Complete[/bold blue]",
                 )
             )
+
+    # Required outputs from each pipeline stage (minimal — only truly essential files)
+    ARCHITECT_REQUIRED_FILES = ["architecture.md"]
+    PLANNER_REQUIRED_FILES = ["plan.json"]
 
     async def _run_architecture(self, state: ProjectState, user_request: str) -> None:
         """Run the architect agent."""
@@ -197,6 +252,32 @@ class Orchestrator:
         console.print(f"[green]Architect completed.[/green] "
                       f"({result.tool_calls_made} tool calls, {result.total_tokens} tokens)")
 
+        # ── Validate architect output ──
+        missing = self._validate_stage_outputs(self.ARCHITECT_REQUIRED_FILES)
+        if missing:
+            console.print(
+                f"[bold red]Architect failed to produce required files: "
+                f"{missing}[/bold red]"
+            )
+            if self.event_bus:
+                self.event_bus.emit(
+                    "validation.failed",
+                    stage="architect",
+                    missing_files=missing,
+                )
+            # Retry once before giving up
+            console.print("[yellow]Retrying architect...[/yellow]")
+            result = await architect.run(user_request)
+            missing = self._validate_stage_outputs(self.ARCHITECT_REQUIRED_FILES)
+            if missing:
+                console.print(
+                    f"[bold red]Architect still missing files after retry: "
+                    f"{missing}. Failing.[/bold red]"
+                )
+                state.transition("failed")
+                state.save(self.project_path)
+                return
+
         state.transition("architecture_review")
         state.save(self.project_path)
 
@@ -218,9 +299,32 @@ class Orchestrator:
         console.print(f"[green]Planner completed.[/green] "
                       f"({result.tool_calls_made} tool calls, {result.total_tokens} tokens)")
 
+        # ── Validate planner output ──
+        missing = self._validate_stage_outputs(self.PLANNER_REQUIRED_FILES)
+        if missing:
+            console.print(
+                f"[bold red]Planner failed to produce required files: {missing}[/bold red]"
+            )
+            if self.event_bus:
+                self.event_bus.emit("validation.failed", stage="planner", missing_files=missing)
+            # Retry once
+            console.print("[yellow]Retrying planner...[/yellow]")
+            result = await planner.run()
+            missing = self._validate_stage_outputs(self.PLANNER_REQUIRED_FILES)
+            if missing:
+                console.print(
+                    f"[bold red]Planner still missing files after retry: "
+                    f"{missing}. Failing.[/bold red]"
+                )
+                state.transition("failed")
+                state.save(self.project_path)
+                return
+
         # Parse the plan into state
         try:
             phases = PlannerAgent.parse_plan(self.project_path)
+            if not phases:
+                raise ValueError("Plan parsed but contains zero phases")
             state.phases = phases
             self._print_plan(phases)
         except Exception as e:
@@ -275,6 +379,9 @@ class Orchestrator:
             else:
                 await self._execute_phase_full(state, phase, worker, reviewer)
 
+            if state.status == "failed" or phase.status == "failed":
+                return
+
             phase.status = "completed"
             state.save(self.project_path)
 
@@ -308,15 +415,41 @@ class Orchestrator:
                 # Check for deadlock
                 still_pending = [t for t in phase.tasks if t.status == "pending"]
                 if still_pending:
-                    logger.warning(
-                        "Deadlock: no ready tasks but %d pending. Skipping: %s",
-                        len(still_pending),
-                        [t.id for t in still_pending],
+                    stuck_ids = [t.id for t in still_pending]
+                    stuck_deps = {
+                        t.id: [d for d in t.dependencies if d not in
+                               {x.id for x in phase.tasks if x.status == "completed"}]
+                        for t in still_pending
+                    }
+                    logger.error(
+                        "DEADLOCK in phase '%s': %d tasks stuck with unresolvable "
+                        "dependencies. Stuck: %s  Missing deps: %s",
+                        phase.name, len(still_pending), stuck_ids, stuck_deps,
                     )
+                    if self.event_bus:
+                        self.event_bus.emit(
+                            "phase.deadlock",
+                            phase_id=phase.id,
+                            phase_name=phase.name,
+                            stuck_tasks=stuck_ids,
+                            missing_deps=stuck_deps,
+                        )
+                    # Mark stuck tasks as failed — don't pretend they completed
                     for t in still_pending:
-                        t.status = "completed"
+                        t.status = "rejected"
+                        t.review_feedback = (
+                            f"DEADLOCK: task blocked by unresolvable dependencies: "
+                            f"{stuck_deps.get(t.id, [])}"
+                        )
+                    phase.status = "failed"
+                    state.transition("failed")
                     state.save(self.project_path)
-                break
+                    console.print(
+                        f"[bold red]DEADLOCK:[/bold red] {len(still_pending)} task(s) in "
+                        f"phase '{phase.name}' have unresolvable dependencies. "
+                        f"Skipped IDs: {stuck_ids}"
+                    )
+                return
 
             if self.config.review_mode == "none":
                 # Yolo — run worker only, auto-approve
@@ -367,7 +500,7 @@ class Orchestrator:
         first_half = tasks[:midpoint]
         second_half = tasks[midpoint:]
 
-        async def _run_workers_for(batch: list) -> None:
+        async def _run_workers_for(batch: list) -> bool:
             """Run workers for all tasks in batch (topological order within batch)."""
             pending_ids = {t.id for t in batch if t.status == "pending"}
             while pending_ids:
@@ -385,16 +518,40 @@ class Orchestrator:
                         break
 
                 if ready is None:
-                    # Deadlock within batch — skip remaining
-                    logger.warning(
-                        "Milestone batch deadlock — skipping %d pending tasks",
-                        len([t for t in batch if t.status == "pending"]),
+                    # Deadlock within batch
+                    stuck = [t for t in batch if t.status == "pending"]
+                    stuck_ids = [t.id for t in stuck]
+                    stuck_deps = {
+                        t.id: [d for d in t.dependencies if not
+                               self._task_completed_in_state(state, d)]
+                        for t in stuck
+                    }
+                    logger.error(
+                        "DEADLOCK in milestone batch: %d tasks stuck. IDs: %s  Deps: %s",
+                        len(stuck), stuck_ids, stuck_deps,
                     )
-                    for t in batch:
-                        if t.status == "pending":
-                            t.status = "completed"
+                    if self.event_bus:
+                        self.event_bus.emit(
+                            "phase.deadlock",
+                            phase_id=phase.id,
+                            phase_name=phase.name,
+                            stuck_tasks=stuck_ids,
+                            missing_deps=stuck_deps,
+                        )
+                    for t in stuck:
+                        t.status = "rejected"
+                        t.review_feedback = (
+                            f"DEADLOCK: blocked by unresolvable dependencies: "
+                            f"{stuck_deps.get(t.id, [])}"
+                        )
+                    phase.status = "failed"
+                    state.transition("failed")
                     state.save(self.project_path)
-                    break
+                    console.print(
+                        f"[bold red]DEADLOCK:[/bold red] {len(stuck)} task(s) have "
+                        f"unresolvable dependencies. Skipped: {stuck_ids}"
+                    )
+                    return False
 
                 ready.status = "in_progress"
                 ready.attempts = (ready.attempts or 0) + 1
@@ -419,12 +576,13 @@ class Orchestrator:
                 state.save(self.project_path)
 
                 pending_ids = {t.id for t in batch if t.status == "pending"}
+            return True
 
-        async def _batch_review_and_retry(batch: list, batch_label: str) -> None:
+        async def _batch_review_and_retry(batch: list, batch_label: str) -> bool:
             """Run batch reviewer on a set of tasks; retry rejected ones once."""
             completed_batch = [t for t in batch if t.status == "completed"]
             if not completed_batch:
-                return
+                return True
 
             console.print(
                 f"\n  [bold yellow]Batch review:[/bold yellow] {batch_label} "
@@ -454,32 +612,177 @@ class Orchestrator:
                 console.print(
                     f"\n  [yellow]Re-running {len(rejected)} rejected task(s) with feedback...[/yellow]"
                 )
-                await _run_workers_for(rejected)
+                rerun_ok = await _run_workers_for(rejected)
+                if not rerun_ok:
+                    return False
 
                 # One more batch review pass on the retried tasks
                 retry_results = await reviewer.run_batch(rejected, f"{batch_label}_retry")
+                still_rejected: list[Task] = []
                 for task in rejected:
                     res = retry_results.get(task.id)
+                    if res is not None:
+                        task.review_feedback = res.feedback
+                    if res and res.approved:
+                        task.status = "completed"
+                        if self.event_bus:
+                            self.event_bus.task_completed(task.id, task.title)
+                        continue
                     if res and not res.approved:
                         console.print(
                             f"  [yellow]Still failing after retry — approving '{task.title}' to unblock.[/yellow]"
                         )
-                    task.status = "completed"
+                    task.status = "rejected"
                     if self.event_bus:
-                        self.event_bus.task_completed(task.id, task.title)
+                        self.event_bus.task_rejected(
+                            task.id,
+                            task.title,
+                            task.review_feedback or "Task still failed after retry.",
+                        )
+                    still_rejected.append(task)
+                    phase.status = "failed"
+                    state.transition("failed")
+                    state.save(self.project_path)
+                    console.print(
+                        f"[bold red]Batch review failed after retry.[/bold red] "
+                        f"Stopping phase '{phase.name}' because '{task.title}' still failed."
+                    )
+                    return False
 
                 state.save(self.project_path)
 
         # ── Run first half ──
         console.print(f"\n  [dim]Running first half ({len(first_half)} tasks)...[/dim]")
-        await _run_workers_for(first_half)
-        await _batch_review_and_retry(first_half, f"{phase.id}_mid")
+        first_half_ok = await _run_workers_for(first_half)
+        if first_half_ok is False:
+            return
+        first_review_ok = await _batch_review_and_retry(first_half, f"{phase.id}_mid")
+        if first_review_ok is False:
+            return
 
         # ── Run second half ──
         if second_half:
             console.print(f"\n  [dim]Running second half ({len(second_half)} tasks)...[/dim]")
-            await _run_workers_for(second_half)
-            await _batch_review_and_retry(second_half, f"{phase.id}_end")
+            second_half_ok = await _run_workers_for(second_half)
+            if second_half_ok is False:
+                return
+            second_review_ok = await _batch_review_and_retry(second_half, f"{phase.id}_end")
+            if second_review_ok is False:
+                return
+
+    def _validate_stage_outputs(self, required_files: list[str]) -> list[str]:
+        """Check that required .ateam/ files exist and are non-empty. Returns list of missing."""
+        ateam_dir = self.project_path / ".ateam"
+        missing = []
+        for filename in required_files:
+            f = ateam_dir / filename
+            if not f.exists() or f.stat().st_size == 0:
+                missing.append(filename)
+        return missing
+
+    def _execution_consistency_issues(self, state: ProjectState) -> list[str]:
+        """Validate that execution state, plan.json, and architecture docs still agree."""
+        issues: list[str] = []
+        issues.extend(self._plan_state_mismatch_issues(state))
+        issues.extend(self._stack_drift_issues(state))
+        return issues
+
+    def _plan_state_mismatch_issues(self, state: ProjectState) -> list[str]:
+        plan_file = self.project_path / ".ateam" / "plan.json"
+        if not plan_file.exists() or not state.phases:
+            return []
+
+        try:
+            plan_phases = PlannerAgent.parse_plan(self.project_path)
+        except Exception as exc:
+            return [f"plan.json could not be parsed before execution: {exc}"]
+
+        if self._normalize_phase_signature(plan_phases) != self._normalize_phase_signature(state.phases):
+            return [
+                "state.phases does not match .ateam/plan.json. This usually means the project "
+                "was re-run/reset without clearing execution state."
+            ]
+        return []
+
+    def _normalize_phase_signature(self, phases: list[Phase]) -> list[dict]:
+        return [
+            {
+                "id": phase.id,
+                "name": phase.name,
+                "description": phase.description,
+                "tasks": [
+                    {
+                        "id": task.id,
+                        "title": task.title,
+                        "description": task.description,
+                        "agent_type": task.agent_type,
+                        "dependencies": list(task.dependencies),
+                    }
+                    for task in phase.tasks
+                ],
+            }
+            for phase in phases
+        ]
+
+    def _stack_drift_issues(self, state: ProjectState) -> list[str]:
+        """Detect obvious framework/version/style drift across docs, plan, and state."""
+        sources: list[tuple[str, str]] = []
+        ateam_dir = self.project_path / ".ateam"
+        for name in ["architecture.md", "standards.md", "design.md", "tech_stack.md"]:
+            path = ateam_dir / name
+            if path.exists():
+                sources.append((name, path.read_text(encoding="utf-8")))
+
+        plan_file = ateam_dir / "plan.json"
+        if plan_file.exists():
+            sources.append(("plan.json", plan_file.read_text(encoding="utf-8")))
+
+        sources.append(("state.json", state.model_dump_json(indent=2)))
+
+        issues: list[str] = []
+        version_map: dict[str, str] = {}
+        style_map: dict[str, str] = {}
+
+        for label, text in sources:
+            versions = self._extract_angular_versions(text)
+            if len(versions) > 1:
+                issues.append(f"{label} mentions multiple Angular versions: {', '.join(sorted(versions))}")
+            elif len(versions) == 1:
+                version_map[label] = next(iter(versions))
+
+            styles = self._extract_style_formats(text)
+            if len(styles) > 1:
+                issues.append(f"{label} mixes CSS and SCSS conventions.")
+            elif len(styles) == 1:
+                style_map[label] = next(iter(styles))
+
+        unique_versions = sorted(set(version_map.values()))
+        if len(unique_versions) > 1:
+            details = ", ".join(f"{label}={value}" for label, value in sorted(version_map.items()))
+            issues.append(f"Angular version drift detected across docs/plan/state: {details}")
+
+        unique_styles = sorted(set(style_map.values()))
+        if len(unique_styles) > 1:
+            details = ", ".join(f"{label}={value}" for label, value in sorted(style_map.items()))
+            issues.append(f"Style-format drift detected across docs/plan/state: {details}")
+
+        return issues
+
+    def _extract_angular_versions(self, text: str) -> set[str]:
+        pattern = re.compile(r"\bAngular(?:\s+CLI)?\s*(?:[~v]|version)?\s*(\d{2})(?:\.\d+)?", re.IGNORECASE)
+        return {match.group(1) for match in pattern.finditer(text)}
+
+    def _extract_style_formats(self, text: str) -> set[str]:
+        styles = set()
+        if re.search(r"--style=scss|styles\.scss|\.component\.scss\b|\bSCSS\b", text, re.IGNORECASE):
+            styles.add("scss")
+        if re.search(
+            r"--style=css|styles\.css|\.component\.css\b|CSS styling \(no SCSS\)|\bno SCSS\b",
+            text,
+            re.IGNORECASE,
+        ):
+            styles.add("css")
+        return styles
 
     def _next_ready_task(self, phase: "Phase") -> "Task | None":
         """Return the first pending task whose dependencies are all completed."""
@@ -564,9 +867,11 @@ class Orchestrator:
         # Exhausted retries — mark as completed anyway to unblock
         console.print(
             f"  [yellow]Max retries reached for '{task.title}'. "
-            f"Marking as completed to continue.[/yellow]"
+            f"Marking task and project as failed.[/yellow]"
         )
-        task.status = "completed"
+        task.status = "rejected"
+        state.transition("failed")
+        state.save(self.project_path)
 
     async def _checkpoint(
         self, checkpoint_type: str, summary: str, files: list[Path]
