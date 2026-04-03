@@ -12,6 +12,14 @@ from pydantic import BaseModel, Field
 from .phase import Phase
 
 
+class TokenUsage(BaseModel):
+    """Cumulative token usage for a project."""
+
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+
 class ProjectState(BaseModel):
     """Full state of a project being built by A-TEAM."""
 
@@ -31,6 +39,7 @@ class ProjectState(BaseModel):
     current_phase_index: int = 0
     current_task_index: int = 0
     phases: list[Phase] = Field(default_factory=list)
+    tokens: TokenUsage = Field(default_factory=TokenUsage)
     created_at: str = ""
     updated_at: str = ""
 

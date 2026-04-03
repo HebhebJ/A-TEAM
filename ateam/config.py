@@ -42,10 +42,10 @@ MODES: dict[str, dict] = {
         "review_mode": "none",
         "max_parallel": 1,
     },
-    # Turbo: no checkpoints, batch reviews, parallel execution (max 3 concurrent)
+    # Turbo: no checkpoints, no review, parallel execution (max 3 concurrent)
     "turbo": {
         "human_checkpoints": [],
-        "review_mode": "milestones",
+        "review_mode": "none",
         "max_parallel": 3,
     },
 }

@@ -395,6 +395,7 @@ Dependencies drive topological ordering in `_next_ready_task()`. The planner is 
 | Event | Payload |
 |---|---|
 | `project.started` | project, request |
+| `project.completed` | project, total_tasks, completed_tasks, total_phases, completed_phases, total_tokens, prompt_tokens, completion_tokens, total_tool_calls, total_iterations, duration_seconds, avg_task_seconds, mode |
 | `status.change` | old, new |
 | `phase.started` | phase_id, phase_name |
 | `phase.completed` | phase_id, phase_name |

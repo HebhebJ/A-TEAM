@@ -14,22 +14,37 @@ from .base import Tool, _resolve_safe_path
 logger = logging.getLogger(__name__)
 
 
+# Commands that are explicitly ALLOWED even if they might match server patterns
+# (project scaffolding, one-time setup commands that complete execution)
+_ALLOWED_PATTERNS = [
+    r"\bnpm\s+create\b",
+    r"\bnpx\s+create-",
+    r"\byarn\s+create\b",
+    r"\bcreate-vite\b",
+    r"\bcreate-react-app\b",
+    r"\bcreate-next-app\b",
+    r"\bdegit\b",
+    r"\bgit\s+clone\b",
+]
+
 # Patterns that indicate long-running server/watch processes that never exit
 _SERVER_PATTERNS = [
-    r"\bnpm run dev\b",
-    r"\bnpm start\b",
-    r"\bvite\b(?!.*build)",
-    r"\bnext dev\b",
-    r"\bnuxt dev\b",
-    r"\bng serve\b",
+    r"\bnpm\s+run\s+dev\b",
+    r"\bnpm\s+start\b",
+    r"\bvite\s+(dev|serve|preview)?\s*$",
+    r"\bnext\s+dev\b",
+    r"\bnuxt\s+dev\b",
+    r"\bng\s+serve\b",
     r"\buvicorn\b",
-    r"\bflask run\b",
-    r"\bpython -m http\.server\b",
-    r"\bpython manage\.py runserver\b",
+    r"\bflask\s+run\b",
+    r"\bpython\s+-m\s+http\.server\b",
+    r"\bpython\s+manage\.py\s+runserver\b",
     r"\bnodemon\b",
     r"\bwatchman\b",
     r"\b--watch\b",
     r"\b--hot\b",
+    r"\b--live-reload\b",
+    r"\b--hmr\b",
 ]
 
 _DANGEROUS_PATTERNS = [
@@ -80,14 +95,20 @@ class RunCommandTool(Tool):
         if not cwd.is_dir():
             return f"Error: Working directory not found: {working_dir}"
 
-        # Reject commands that are known to run forever (dev servers, watchers)
-        for pattern in _SERVER_PATTERNS:
+        # Allow project scaffolding commands even if they might match server patterns
+        for pattern in _ALLOWED_PATTERNS:
             if re.search(pattern, command, re.IGNORECASE):
-                return (
-                    "Error: This command starts a long-running server/watcher that never exits "
-                    "and cannot be used here. To verify the project builds correctly, "
-                    "use 'npm run build' (or equivalent) instead."
-                )
+                logger.info("Command allowed by allowlist: %s", command)
+                break
+        else:
+            # Reject commands that are known to run forever (dev servers, watchers)
+            for pattern in _SERVER_PATTERNS:
+                if re.search(pattern, command, re.IGNORECASE):
+                    return (
+                        "Error: This command starts a long-running server/watcher that never exits "
+                        "and cannot be used here. To verify the project builds correctly, "
+                        "use 'npm run build' (or equivalent) instead."
+                    )
 
         for pattern in _DANGEROUS_PATTERNS:
             if re.search(pattern, command, re.IGNORECASE):

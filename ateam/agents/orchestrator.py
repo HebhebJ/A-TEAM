@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from pathlib import Path
 from typing import Callable, Awaitable
 
@@ -68,6 +69,13 @@ class Orchestrator:
         # EventBus — created lazily once project_path is set up
         self.event_bus: EventBus | None = None
 
+        # Progress tracking for ETA calculation
+        self._task_start_times: dict[str, float] = {}  # task_id -> start timestamp
+        self._completed_task_durations: list[float] = []  # durations of completed tasks
+        self._execution_start_time: float = 0
+        self._total_tool_calls: int = 0  # aggregate tool calls across all agents
+        self._total_iterations: int = 0  # aggregate iterations across all agents
+
     def _register_tools(self) -> None:
         """Register all available tools."""
         self.tool_registry.register(ReadFileTool())
@@ -114,6 +122,9 @@ class Orchestrator:
         )
 
         try:
+            # Track execution start time for duration calculation
+            self._execution_start_time = time.monotonic()
+
             # Resume from current state
             await self._run_from_state(state, user_request)
         finally:
@@ -221,6 +232,21 @@ class Orchestrator:
 
         # --- DONE ---
         if state.status == "completed":
+            # If resuming a completed project, use stored tokens from state
+            if state.tokens.total_tokens > 0:
+                # Restore token counts from state into the LLM client for display
+                self.llm_client.total_usage.prompt_tokens = state.tokens.prompt_tokens
+                self.llm_client.total_usage.completion_tokens = state.tokens.completion_tokens
+                self.llm_client.total_usage.total_tokens = state.tokens.total_tokens
+                # Emit the stored tokens so the dashboard shows them
+                if self.event_bus:
+                    self.event_bus.tokens_update(
+                        state.tokens.prompt_tokens,
+                        state.tokens.completion_tokens,
+                        state.tokens.total_tokens,
+                    )
+
+            self._emit_project_completed(state)
             console.print(
                 Panel(
                     "[bold green]Project completed successfully![/bold green]\n"
@@ -493,6 +519,7 @@ class Orchestrator:
                     for t in batch:
                         t.status = "in_progress"
                         t.attempts = 1
+                        self._task_start_times[t.id] = time.monotonic()
                         if self.event_bus:
                             self.event_bus.task_started(t.id, t.title, t.agent_type, 1)
                     state.save(self.project_path)
@@ -512,9 +539,11 @@ class Orchestrator:
                                 self.event_bus.task_rejected(t.id, t.title, str(result))
                         else:
                             t.status = "completed"
+                            self._record_task_duration(t.id)
                             if self.event_bus:
                                 self.event_bus.task_completed(t.id, t.title)
                     state.save(self.project_path)
+                    self._emit_progress(state)
                 else:
                     # Full review parallel — run workers, then review each
                     for t in batch:
@@ -1063,6 +1092,76 @@ class Orchestrator:
 
         console.print(table)
 
+    # --- Progress / ETA tracking ---
+
+    def _count_total_tasks(self, state: ProjectState) -> int:
+        """Count total tasks across all phases."""
+        return sum(len(phase.tasks) for phase in state.phases)
+
+    def _count_completed_tasks(self, state: ProjectState) -> int:
+        """Count completed tasks across all phases."""
+        return sum(1 for phase in state.phases for task in phase.tasks if task.status == "completed")
+
+    def _get_current_phase_name(self, state: ProjectState) -> str:
+        """Get the name of the currently executing phase."""
+        if 0 <= state.current_phase_index < len(state.phases):
+            return state.phases[state.current_phase_index].name
+        return ""
+
+    def _get_current_task_name(self, state: ProjectState) -> str | None:
+        """Get the name of the currently executing task (if any)."""
+        for phase in state.phases:
+            for task in phase.tasks:
+                if task.status in ("in_progress", "review"):
+                    return task.title
+        return None
+
+    def _calculate_eta(self, state: ProjectState) -> tuple[float | None, float | None]:
+        """Calculate ETA based on average task completion time.
+
+        Returns:
+            Tuple of (eta_seconds, avg_task_seconds) or (None, None) if not enough data.
+        """
+        completed = self._count_completed_tasks(state)
+        total = self._count_total_tasks(state)
+        remaining = total - completed
+
+        if remaining <= 0 or not self._completed_task_durations:
+            return None, None
+
+        avg_task_seconds = sum(self._completed_task_durations) / len(self._completed_task_durations)
+        # Apply a small buffer (10%) to account for variability
+        eta_seconds = remaining * avg_task_seconds * 1.1
+
+        return eta_seconds, avg_task_seconds
+
+    def _emit_progress(self, state: ProjectState) -> None:
+        """Emit a progress update event with ETA."""
+        if not self.event_bus:
+            return
+
+        total = self._count_total_tasks(state)
+        completed = self._count_completed_tasks(state)
+        phase_name = self._get_current_phase_name(state)
+        task_name = self._get_current_task_name(state)
+        eta_seconds, avg_task_seconds = self._calculate_eta(state)
+
+        self.event_bus.progress_update(
+            total_tasks=total,
+            completed_tasks=completed,
+            current_phase=phase_name,
+            current_task=task_name,
+            eta_seconds=eta_seconds,
+            avg_task_seconds=avg_task_seconds,
+        )
+
+    def _record_task_duration(self, task_id: str) -> None:
+        """Record the duration of a completed task for ETA calculation."""
+        if task_id in self._task_start_times:
+            duration = time.monotonic() - self._task_start_times[task_id]
+            self._completed_task_durations.append(duration)
+            del self._task_start_times[task_id]
+
     def _print_usage(self) -> None:
         """Print total token usage."""
         usage = self.llm_client.total_usage
@@ -1071,3 +1170,58 @@ class Orchestrator:
                 f"\n[dim]Total tokens used: {usage.total_tokens:,} "
                 f"(prompt: {usage.prompt_tokens:,}, completion: {usage.completion_tokens:,})[/dim]"
             )
+            if self._completed_task_durations:
+                avg = sum(self._completed_task_durations) / len(self._completed_task_durations)
+                console.print(f"[dim]Average task time: {avg:.0f}s ({len(self._completed_task_durations)} tasks)[/dim]")
+
+    def _sync_tokens_to_state(self, state: ProjectState) -> None:
+        """Sync in-memory LLM token counters to the persisted project state."""
+        usage = self.llm_client.total_usage
+        state.tokens.prompt_tokens = usage.prompt_tokens
+        state.tokens.completion_tokens = usage.completion_tokens
+        state.tokens.total_tokens = usage.total_tokens
+
+    def _emit_token_update(self, state: ProjectState) -> None:
+        """Emit token update event and sync to state for persistence."""
+        self._sync_tokens_to_state(state)
+        if self.event_bus:
+            usage = self.llm_client.total_usage
+            self.event_bus.tokens_update(usage.prompt_tokens, usage.completion_tokens, usage.total_tokens)
+
+    def _emit_project_completed(self, state: ProjectState) -> None:
+        """Emit a project.completed event with full statistics for the dashboard."""
+        if not self.event_bus:
+            return
+
+        # Sync current LLM token usage to state before emitting
+        self._sync_tokens_to_state(state)
+        state.save(self.project_path)
+
+        total_tasks = self._count_total_tasks(state)
+        completed_tasks = self._count_completed_tasks(state)
+        total_phases = len(state.phases)
+        completed_phases = sum(1 for p in state.phases if p.status == "completed")
+
+        # Use state tokens (persisted) as source of truth
+        duration_seconds = time.monotonic() - self._execution_start_time if self._execution_start_time else 0
+        avg_task_seconds = (
+            sum(self._completed_task_durations) / len(self._completed_task_durations)
+            if self._completed_task_durations
+            else 0
+        )
+
+        self.event_bus.project_completed(
+            project_name=self.project_name,
+            total_tasks=total_tasks,
+            completed_tasks=completed_tasks,
+            total_phases=total_phases,
+            completed_phases=completed_phases,
+            total_tokens=state.tokens.total_tokens,
+            prompt_tokens=state.tokens.prompt_tokens,
+            completion_tokens=state.tokens.completion_tokens,
+            total_tool_calls=self._total_tool_calls,
+            total_iterations=self._total_iterations,
+            duration_seconds=duration_seconds,
+            avg_task_seconds=avg_task_seconds,
+            mode=self.config.review_mode,
+        )

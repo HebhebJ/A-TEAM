@@ -99,3 +99,57 @@ class EventBus:
 
     def llm_throttled(self, wait: float) -> None:
         self.emit("llm.throttled", wait=wait)
+
+    # --- Progress / ETA events ---
+
+    def progress_update(
+        self,
+        total_tasks: int,
+        completed_tasks: int,
+        current_phase: str,
+        current_task: str | None = None,
+        eta_seconds: float | None = None,
+        avg_task_seconds: float | None = None,
+    ) -> None:
+        self.emit(
+            "progress.update",
+            total_tasks=total_tasks,
+            completed_tasks=completed_tasks,
+            current_phase=current_phase,
+            current_task=current_task,
+            eta_seconds=eta_seconds,
+            avg_task_seconds=avg_task_seconds,
+        )
+
+    def project_completed(
+        self,
+        project_name: str,
+        total_tasks: int,
+        completed_tasks: int,
+        total_phases: int,
+        completed_phases: int,
+        total_tokens: int,
+        prompt_tokens: int,
+        completion_tokens: int,
+        total_tool_calls: int,
+        total_iterations: int,
+        duration_seconds: float,
+        avg_task_seconds: float,
+        mode: str,
+    ) -> None:
+        self.emit(
+            "project.completed",
+            project=project_name,
+            total_tasks=total_tasks,
+            completed_tasks=completed_tasks,
+            total_phases=total_phases,
+            completed_phases=completed_phases,
+            total_tokens=total_tokens,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tool_calls=total_tool_calls,
+            total_iterations=total_iterations,
+            duration_seconds=duration_seconds,
+            avg_task_seconds=avg_task_seconds,
+            mode=mode,
+        )
