@@ -1,7 +1,7 @@
 # A-TEAM: Agentic Development System
 
 ## Context
-Building a multi-agent system where an orchestrator spawns specialized AI agents (architect, planner, workers, reviewer) to collaboratively build software projects from a high-level user request. LLM calls go through OpenRouter API. Agents communicate via files. Human checkpoints at key stages.
+Multi-agent system where an orchestrator spawns specialized AI agents (architect, planner, workers, reviewer, intervention) to collaboratively build software projects from a high-level user request. LLM calls go through OpenRouter API. Agents communicate via files. Human checkpoints at key stages. A real-time web dashboard provides live visibility and control.
 
 ## Architecture
 
@@ -19,6 +19,9 @@ User Request -> Orchestrator (Python state machine, NOT an LLM)
          -> If REJECT: loop back to worker with feedback (max 3 retries)
        -> CHECKPOINT: human approval between phases
   -> Done
+
+At any point: Intervention Agent can be triggered to pause the pipeline,
+  accept a repair instruction, and resume.
 ```
 
 ### Key Design Decisions
@@ -26,6 +29,7 @@ User Request -> Orchestrator (Python state machine, NOT an LLM)
 - **File-based state** -- resumable, inspectable, human-editable
 - **Single BaseAgent class** -- all agents share the same tool-calling loop, differ only in prompt + allowed tools
 - **OpenRouter with OpenAI-compatible format** -- easy to swap providers later
+- **Event bus** -- all agent activity emitted to `.ateam/events.jsonl`; dashboard streams these via SSE
 
 ## Project Structure
 ```
@@ -34,15 +38,18 @@ A-TEAM/
 ├── config.toml
 ├── .env                        # OPENROUTER_API_KEY
 ├── .gitignore
+├── PLAN.md                     # This file
 ├── ateam/
 │   ├── __init__.py
 │   ├── __main__.py             # python -m ateam
 │   ├── cli.py                  # CLI interface
 │   ├── config.py               # Config loading (env + toml + CLI)
+│   ├── events.py               # EventBus — writes structured events to events.jsonl
+│   ├── intervention.py         # Intervention state helpers
 │   ├── llm/
 │   │   ├── __init__.py
 │   │   ├── base.py             # LLMClient protocol
-│   │   ├── openrouter.py       # OpenRouter implementation
+│   │   ├── openrouter.py       # OpenRouter implementation (streams events via EventBus)
 │   │   └── message_types.py    # Message, ToolCall, LLMResponse dataclasses
 │   ├── agents/
 │   │   ├── __init__.py
@@ -51,7 +58,8 @@ A-TEAM/
 │   │   ├── architect.py        # Architect agent
 │   │   ├── planner.py          # Planner agent
 │   │   ├── worker.py           # Worker agent (parameterized by specialty)
-│   │   └── reviewer.py         # Reviewer agent
+│   │   ├── reviewer.py         # Reviewer agent
+│   │   └── intervention.py     # Intervention agent (repair + resume)
 │   ├── prompts/
 │   │   ├── architect.md
 │   │   ├── planner.md
@@ -59,63 +67,65 @@ A-TEAM/
 │   │   ├── worker_backend.md
 │   │   ├── worker_database.md
 │   │   ├── worker_devops.md
-│   │   └── reviewer.md
+│   │   ├── reviewer.md
+│   │   ├── reviewer_batch.md
+│   │   └── intervention.md
 │   ├── tools/
 │   │   ├── __init__.py
 │   │   ├── base.py             # Tool protocol + ToolRegistry
 │   │   ├── file_ops.py         # read_file, write_file, list_directory
 │   │   ├── search.py           # search_files, search_content
-│   │   └── shell.py            # run_command (sandboxed, timeout)
-│   └── state/
+│   │   ├── shell.py            # run_command (sandboxed, timeout)
+│   │   └── web.py              # fetch_url, web_search
+│   ├── state/
+│   │   ├── __init__.py
+│   │   ├── project_state.py    # ProjectState (JSON-backed persistence)
+│   │   └── phase.py            # Phase, Task dataclasses
+│   └── dashboard/
 │       ├── __init__.py
-│       ├── project_state.py    # ProjectState (JSON-backed persistence)
-│       └── phase.py            # Phase, Task dataclasses
+│       ├── server.py           # FastAPI server — project mgmt + SSE event streaming
+│       └── index.html          # Single-file SPA dashboard
 └── workspaces/                 # Generated projects go here
     └── <project>/
-        ├── .ateam/             # Metadata, state, docs, logs, reviews
-        └── src/                # Generated source code
+        ├── .ateam/             # Metadata: state.json, events.jsonl, logs/, docs/
+        └── <generated source>
 ```
 
-## Build Phases (incremental)
+## Dashboard
 
-### Phase 1: Core foundation
-- `config.py` -- load API key from env/.env/config.toml
-- `llm/message_types.py` -- Message, ToolCall, LLMResponse dataclasses
-- `llm/base.py` -- LLMClient protocol
-- `llm/openrouter.py` -- chat completions with tool calling support
-- `tools/base.py` -- Tool protocol + ToolRegistry
-- `tools/file_ops.py` -- read_file, write_file, list_directory
-- `tools/search.py` -- search_files, search_content
-- `tools/shell.py` -- run_command
+Web UI served by `dashboard/server.py` (FastAPI). Run alongside the CLI or standalone.
 
-### Phase 2: Agent system
-- `agents/base.py` -- BaseAgent with agentic tool-calling loop
-- `state/phase.py` -- Phase, Task dataclasses
-- `state/project_state.py` -- JSON persistence + state transitions
-- `agents/orchestrator.py` -- state machine
-- Prompts for all agent types
+### Features
+- **Projects panel** — list, create, launch, delete projects; live status chips
+- **Plan tab** — phase/task tree with status icons and agent-type badges
+- **Live Activity feed** — real-time SSE stream of all agent events (tool calls, LLM requests, task progress, checkpoints)
+- **Visual Office mode** — toggle from the Live Activity header; renders a top-down 2D office floor:
+  - Dark tiled floor background; fixed desk row for Architect / Planner / Reviewer, dynamic worker bay below
+  - Each station: person avatar (head + shoulders, colored by role) sitting at a wood-grain desk with monitor + keyboard
+  - Idle → avatar fades out; Working → avatar bounces (typing), monitor glows + scanlines, status pip pulses; Thinking → thought bubble floats above avatar; Done → avatar dims
+  - Tool-call flash: desk briefly lights up in the agent's color
+  - Click any desk to open an agent log modal with that agent's recent events in feed format
+- **Checkpoint banner** — approve/reject pipeline checkpoints inline
+- **Intervention modal** — send repair instructions; view intervention history; resume pipeline
+- **Process manager** — view and kill background processes per project
+- **Token tracker** — running prompt/completion/total token counts in the footer
 
-### Phase 3: All agents + CLI
-- `agents/architect.py`, `planner.py`, `worker.py`, `reviewer.py`
-- `cli.py` -- CLI with checkpoints (approve/reject/modify)
-- `__main__.py` -- entry point
-- Logging (JSONL per agent in .ateam/logs/)
-
-### Phase 4: Polish
-- Resume from interrupted state
-- Better CLI output (progress, colors)
-- Error handling refinement
+### Event flow
+```
+Agent/LLM code  -->  EventBus.emit()  -->  .ateam/events.jsonl
+                                                  |
+                                    server.py tails file (150ms poll)
+                                                  |
+                                         SSE stream  -->  browser handleEvent()
+                                                              |
+                                              feed entries + visual office state
+```
 
 ## Tool Access Per Agent
-| Agent     | read_file | write_file | list_directory | search_files | search_content | run_command |
-|-----------|-----------|------------|----------------|--------------|----------------|-------------|
-| Architect | x         | x          | x              |              |                |             |
-| Planner   | x         | x          | x              |              |                |             |
-| Workers   | x         | x          | x              | x            | x              | x           |
-| Reviewer  | x         | x          | x              | x            | x              |             |
-
-## Verification
-- Phase 1: Unit test OpenRouter client with a simple prompt
-- Phase 2: Run architect agent on "make a cat website", verify it creates .md files in workspace
-- Phase 3: Full end-to-end run with checkpoints
-- Phase 4: Interrupt mid-run, resume, verify state consistency
+| Agent        | read_file | write_file | list_directory | search_files | search_content | run_command | fetch_url | web_search |
+|--------------|-----------|------------|----------------|--------------|----------------|-------------|-----------|------------|
+| Architect    | x         | x          | x              |              |                |             |           |            |
+| Planner      | x         | x          | x              |              |                |             |           |            |
+| Workers      | x         | x          | x              | x            | x              | x           | x         | x          |
+| Reviewer     | x         | x          | x              | x            | x              |             |           |            |
+| Intervention | x         | x          | x              | x            | x              | x           |           |            |

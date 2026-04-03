@@ -156,6 +156,7 @@ Modes control how much human oversight and review happens during a run. Set with
 | `standard` | arch + plan + each phase | every task | careful projects, first runs |
 | `auto` | none | every task | autonomous runs, still validates output |
 | `light` | none | batch at mid + end of each phase | long projects, token-efficient |
+| `turbo` | none | batch at mid + end of each phase | same reviewer cadence as `light`; presets `max_parallel = 3` |
 | `yolo` | none | none | fast prototyping, throwaway code |
 
 **Review modes explained:**
@@ -165,6 +166,7 @@ Modes control how much human oversight and review happens during a run. Set with
 
 Modes can be changed between runs via the dashboard mode badge (click it).
 In `light` mode, multiple reviewer appearances during a single run are expected because milestone reviews happen at phase midpoints and phase ends.
+`turbo` currently uses that same milestone execution path, so expect the same review cadence as `light` even though the mode preset sets `max_parallel = 3`.
 
 ---
 
@@ -213,8 +215,9 @@ default_model = "anthropic/claude-sonnet-4"
 # reviewer  = "anthropic/claude-sonnet-4"
 
 [orchestration]
-mode = "standard"         # default mode: standard | auto | light | yolo
+mode = "standard"         # default mode: standard | auto | light | turbo | yolo
 max_review_retries = 3    # max times a rejected task is re-run
+max_parallel = 1          # turbo preset sets this to 3
 command_timeout = 120     # seconds per shell command
 
 [tools]
@@ -241,7 +244,7 @@ Arguments:
 
 Options:
   --name NAME           Project name (default: slugified from request)
-  --mode MODE           Run mode: standard | auto | light | yolo  (default: standard)
+  --mode MODE           Run mode: standard | auto | light | turbo | yolo  (default: standard)
   --model MODEL         LLM model to use (any OpenRouter model string)
   --workspace DIR       Workspace directory (default: ./workspaces)
   --resume NAME         Resume an interrupted project by name

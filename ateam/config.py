@@ -22,21 +22,31 @@ MODES: dict[str, dict] = {
     "standard": {
         "human_checkpoints": ["architecture", "planning", "phase_complete"],
         "review_mode": "full",
+        "max_parallel": 1,
     },
     # Auto: no human checkpoints, still reviews every task
     "auto": {
         "human_checkpoints": [],
         "review_mode": "full",
+        "max_parallel": 1,
     },
     # Light: no checkpoints, reviews at halfway + end of each phase (batch)
     "light": {
         "human_checkpoints": [],
         "review_mode": "milestones",
+        "max_parallel": 1,
     },
     # Yolo: no checkpoints, no review — straight through
     "yolo": {
         "human_checkpoints": [],
         "review_mode": "none",
+        "max_parallel": 1,
+    },
+    # Turbo: no checkpoints, batch reviews, parallel execution (max 3 concurrent)
+    "turbo": {
+        "human_checkpoints": [],
+        "review_mode": "milestones",
+        "max_parallel": 3,
     },
 }
 
@@ -49,6 +59,7 @@ class Config:
     openrouter_api_key: str = ""
     api_base_url: str = "https://openrouter.ai/api/v1"
     default_model: str = "anthropic/claude-sonnet-4"
+    min_request_interval: float = 3.0  # seconds between LLM calls (increase for free models)
 
     # Per-agent model overrides (None = use default_model)
     agent_models: dict[str, str] = field(default_factory=dict)
@@ -56,6 +67,8 @@ class Config:
     # Orchestration
     mode: str = "standard"
     max_review_retries: int = 3
+    max_planner_retries: int = 3
+    max_parallel: int = 1  # max concurrent worker tasks (1 = sequential, 2-5 = parallel)
     human_checkpoints: list[str] = field(
         default_factory=lambda: ["architecture", "planning", "phase_complete"]
     )
@@ -79,13 +92,14 @@ class Config:
         return self.agent_models.get(agent_type, self.default_model)
 
     def apply_mode(self, mode_name: str) -> None:
-        """Apply a named mode preset, overriding checkpoints and review_mode."""
+        """Apply a named mode preset, overriding checkpoints, review_mode, and max_parallel."""
         preset = MODES.get(mode_name)
         if not preset:
             raise ValueError(f"Unknown mode '{mode_name}'. Choose from: {', '.join(MODES)}")
         self.mode = mode_name
         self.human_checkpoints = list(preset["human_checkpoints"])
         self.review_mode = preset["review_mode"]  # type: ignore[assignment]
+        self.max_parallel = preset.get("max_parallel", 1)
 
     @classmethod
     def load(cls, project_root: Path | None = None, cli_overrides: dict | None = None) -> Config:
@@ -117,8 +131,11 @@ class Config:
             default_model=os.environ.get(
                 "ATEAM_MODEL", llm_conf.get("default_model", cls.default_model)
             ),
+            min_request_interval=llm_conf.get("min_request_interval", cls.min_request_interval),
             agent_models=llm_conf.get("agent_models", {}),
             max_review_retries=orch_conf.get("max_review_retries", cls.max_review_retries),
+            max_planner_retries=orch_conf.get("max_planner_retries", cls.max_planner_retries),
+            max_parallel=orch_conf.get("max_parallel", cls.max_parallel),
             human_checkpoints=orch_conf.get("human_checkpoints", ["architecture", "planning", "phase_complete"]),
             review_mode=orch_conf.get("review_mode", "full"),
             workspace_dir=Path(

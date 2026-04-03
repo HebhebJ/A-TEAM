@@ -198,13 +198,14 @@ def main() -> None:
     )
     parser.add_argument(
         "--mode",
-        choices=["standard", "auto", "light", "yolo"],
+        choices=["standard", "auto", "light", "yolo", "turbo"],
         default=None,
         help=(
             "standard: checkpoints + review every task (default) | "
             "auto: no checkpoints + review every task | "
             "light: no checkpoints + batch review at halfway+end of each phase | "
-            "yolo: no checkpoints, no review"
+            "yolo: no checkpoints, no review | "
+            "turbo: no checkpoints, batch reviews, parallel execution (3×)"
         ),
     )
     parser.add_argument(
@@ -265,7 +266,7 @@ def main() -> None:
     config = Config.load(cli_overrides=cli_overrides)
 
     # Show active mode
-    mode_colors = {"standard": "cyan", "auto": "green", "light": "yellow", "yolo": "red"}
+    mode_colors = {"standard": "cyan", "auto": "green", "light": "yellow", "yolo": "red", "turbo": "purple"}
     color = mode_colors.get(config.mode, "white")
     console.print(f"[dim]Mode:[/dim] [{color}]{config.mode}[/{color}]  "
                   f"[dim]Review:[/dim] [white]{config.review_mode}[/white]  "

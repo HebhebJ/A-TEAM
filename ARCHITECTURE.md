@@ -199,15 +199,17 @@ else:
 
 **`_execute_phase_full`** — per-task loop:
 - Picks next ready task via `_next_ready_task()` (topological ordering by dependencies)
+- If `config.max_parallel > 1`, can run multiple independent ready tasks concurrently in this code path
 - `review_mode == "full"`: calls `_execute_task()` which loops worker → reviewer up to `max_review_retries` times
 - `review_mode == "none"`: calls worker only, auto-approves
 
 **`_execute_phase_milestones`** — batch review:
 - Splits phase tasks at the midpoint
-- Runs all workers in the first half (no per-task review)
+- Runs all workers in the first half (no per-task review), still in topological order
 - Calls `reviewer.run_batch()` once on the half — rejected tasks get one worker retry, then a second batch review pass
 - Repeats for the second half
 - Net result: 2–4 LLM reviewer calls per phase instead of N×retries
+- This is the path used by both `light` and `turbo`; today it does not fan out worker execution based on `max_parallel`
 
 **Deadlock detection:** If `_next_ready_task()` returns `None` but there are still pending tasks (circular dependency or missing dependency), the orchestrator logs a warning and force-completes the stuck tasks rather than looping forever.
 
@@ -242,8 +244,8 @@ The loop:
 
 | Agent | Key behavior |
 |---|---|
-| `ArchitectAgent` | Writes 4 docs to `.ateam/` using `write_file`. Structured prompt guides stack selection. |
-| `PlannerAgent` | Reads the 4 docs, writes `plan.json` (machine-readable) and `plan.md` (human-readable). |
+| `ArchitectAgent` | Writes 2 docs to `.ateam/` using `write_file`: `blueprint.md` (what to build — tech stack, architecture, data models, API routes, components) and `standards.md` (how to write it — naming, style, error handling, testing). Structured prompt guides stack selection. |
+| `PlannerAgent` | Reads `blueprint.md` + `standards.md`, writes `plan.json` (machine-readable) and `plan.md` (human-readable). Output is validated: JSON parsing (with code-fence stripping), schema checks, duplicate task ID detection, dependency integrity, and circular dependency detection. Retries up to `max_planner_retries` times on validation failure. |
 | `WorkerAgent` | Dispatches to the correct prompt based on `task.agent_type` (frontend/backend/database/devops). Receives the full completed-tasks summary for context. |
 | `ReviewerAgent` | Has two entry points: `run(task)` for individual review and `run_batch(tasks, batch_id)` for milestone review. Both write review docs to `.ateam/reviews/`. |
 
@@ -430,14 +432,15 @@ On initial page load, `GET /api/projects/{name}/state` loads the current `state.
 
 ```python
 MODES = {
-    "standard": {"human_checkpoints": ["architecture", "planning", "phase_complete"], "review_mode": "full"},
-    "auto":     {"human_checkpoints": [],                                              "review_mode": "full"},
-    "light":    {"human_checkpoints": [],                                              "review_mode": "milestones"},
-    "yolo":     {"human_checkpoints": [],                                              "review_mode": "none"},
+    "standard": {"human_checkpoints": ["architecture", "planning", "phase_complete"], "review_mode": "full",       "max_parallel": 1},
+    "auto":     {"human_checkpoints": [],                                              "review_mode": "full",       "max_parallel": 1},
+    "light":    {"human_checkpoints": [],                                              "review_mode": "milestones", "max_parallel": 1},
+    "turbo":    {"human_checkpoints": [],                                              "review_mode": "milestones", "max_parallel": 3},
+    "yolo":     {"human_checkpoints": [],                                              "review_mode": "none",       "max_parallel": 1},
 }
 ```
 
-`config.apply_mode(name)` sets both `human_checkpoints` and `review_mode` atomically.
+`config.apply_mode(name)` sets `human_checkpoints`, `review_mode`, and `max_parallel` atomically. In practice, `turbo` currently shares the same milestone-review execution path as `light`; its main behavioral difference is the preset `max_parallel = 3`.
 
 ### Checkpoint system
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 5
 RETRY_BACKOFF = [2, 4, 8, 16, 32]  # seconds between retries
+RATE_LIMIT_BACKOFF = [10, 20, 40, 60, 120]  # aggressive backoff for 429s
 
 
 class OpenRouterClient:
@@ -26,10 +28,15 @@ class OpenRouterClient:
         base_url: str = "https://openrouter.ai/api/v1",
         default_model: str = "anthropic/claude-sonnet-4",
         timeout: float = 120.0,
+        min_request_interval: float = 1.0,
+        event_bus: Any = None,
     ):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.default_model = default_model
+        self.min_request_interval = min_request_interval
+        self.event_bus = event_bus
+        self._last_request_time: float = 0
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(timeout, connect=10.0),
             headers={
@@ -49,6 +56,23 @@ class OpenRouterClient:
         model: str | None = None,
     ) -> LLMResponse:
         """Send a chat completion request to OpenRouter."""
+        model_name = model or self.default_model
+
+        # Throttle: ensure minimum interval between requests
+        if self.min_request_interval > 0:
+            now = time.monotonic()
+            elapsed = now - self._last_request_time
+            if elapsed < self.min_request_interval:
+                wait = self.min_request_interval - elapsed
+                logger.debug("Throttling LLM request: waiting %.1fs", wait)
+                if self.event_bus:
+                    self.event_bus.llm_throttled(wait)
+                await asyncio.sleep(wait)
+            self._last_request_time = time.monotonic()
+
+        if self.event_bus:
+            self.event_bus.llm_request_started(model_name, len(messages), len(tools) if tools else 0)
+
         payload: dict[str, Any] = {
             "model": model or self.default_model,
             "messages": [m.to_openai_dict() for m in messages],
@@ -94,13 +118,15 @@ class OpenRouterClient:
                     await asyncio.sleep(wait)
                     continue
 
-            # Rate limited — retry with backoff
+            # Rate limited — retry with aggressive backoff
             if response.status_code == 429:
-                wait = RETRY_BACKOFF[min(attempt, len(RETRY_BACKOFF) - 1)]
+                wait = RATE_LIMIT_BACKOFF[min(attempt, len(RATE_LIMIT_BACKOFF) - 1)]
                 logger.warning(
                     "Rate limited (attempt %d/%d), retrying in %ds...",
                     attempt + 1, MAX_RETRIES, wait,
                 )
+                if self.event_bus:
+                    self.event_bus.llm_retry("Rate limited (429)", wait, attempt + 1)
                 await asyncio.sleep(wait)
                 last_error = LLMAPIError(f"OpenRouter API error 429: {response.text}")
                 continue
@@ -112,6 +138,8 @@ class OpenRouterClient:
                     "Server error %d (attempt %d/%d), retrying in %ds...",
                     response.status_code, attempt + 1, MAX_RETRIES, wait,
                 )
+                if self.event_bus:
+                    self.event_bus.llm_retry(f"Server error {response.status_code}", wait, attempt + 1)
                 await asyncio.sleep(wait)
                 last_error = LLMAPIError(f"OpenRouter API error {response.status_code}: {response.text}")
                 continue
@@ -171,12 +199,17 @@ class OpenRouterClient:
         self.total_usage.completion_tokens += usage.completion_tokens
         self.total_usage.total_tokens += usage.total_tokens
 
-        return LLMResponse(
+        result = LLMResponse(
             message=message,
             usage=usage,
             model=data.get("model", ""),
             finish_reason=choice.get("finish_reason", ""),
         )
+
+        if self.event_bus:
+            self.event_bus.llm_request_completed(result.model, usage.total_tokens, result.finish_reason)
+
+        return result
 
     async def close(self):
         """Close the HTTP client."""

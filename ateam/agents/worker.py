@@ -131,11 +131,27 @@ class WorkerAgent:
         return await agent.run("\n\n---\n\n".join(parts))
 
     def _load_context(self) -> str:
-        """Load architecture + standards as context for the worker."""
+        """Load architecture docs as context for the worker.
+
+        Supports both the new 2-file format (blueprint.md + standards.md)
+        and the legacy 4-file format (architecture.md + standards.md + design.md + tech_stack.md).
+        """
         ateam_dir = self.project_path / ".ateam"
         docs = []
-        for name in ["architecture.md", "standards.md"]:
-            path = ateam_dir / name
-            if path.exists():
-                docs.append(path.read_text(encoding="utf-8"))
-        return "\n\n---\n\n".join(docs)
+
+        # Try new 2-file format first
+        blueprint = ateam_dir / "blueprint.md"
+        standards = ateam_dir / "standards.md"
+        if blueprint.exists():
+            docs.append(blueprint.read_text(encoding="utf-8"))
+        if standards.exists():
+            docs.append(standards.read_text(encoding="utf-8"))
+
+        # Fall back to legacy 4-file format
+        if not docs:
+            for name in ["architecture.md", "standards.md", "design.md", "tech_stack.md"]:
+                path = ateam_dir / name
+                if path.exists():
+                    docs.append(path.read_text(encoding="utf-8"))
+
+        return "\n\n---\n\n".join(docs) if docs else "(No project context found)"

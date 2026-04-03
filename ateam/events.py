@@ -85,3 +85,17 @@ class EventBus:
 
     def status_change(self, old_status: str, new_status: str) -> None:
         self.emit("status.change", old=old_status, new=new_status)
+
+    # --- LLM-level events for visibility into API calls ---
+
+    def llm_request_started(self, model: str, messages: int, tools: int) -> None:
+        self.emit("llm.request_started", model=model, messages=messages, tools=tools)
+
+    def llm_request_completed(self, model: str, tokens: int, finish_reason: str) -> None:
+        self.emit("llm.request_completed", model=model, tokens=tokens, finish_reason=finish_reason)
+
+    def llm_retry(self, error: str, wait: float, attempt: int) -> None:
+        self.emit("llm.retry", error=error[:200], wait=wait, attempt=attempt)
+
+    def llm_throttled(self, wait: float) -> None:
+        self.emit("llm.throttled", wait=wait)

@@ -2,6 +2,7 @@
 api_key_env = "OPENROUTER_API_KEY"
 base_url = "https://openrouter.ai/api/v1"
 default_model = "anthropic/claude-sonnet-4"
+min_request_interval = 1.0  # seconds between LLM calls (increase for free models)
 
 [llm.agent_models]
 # Override model per agent type (optional, falls back to default_model)
@@ -12,6 +13,8 @@ default_model = "anthropic/claude-sonnet-4"
 
 [orchestration]
 max_review_retries = 3
+max_planner_retries = 3
+max_parallel = 1  # 1 = sequential, 2-5 = parallel concurrency limit
 human_checkpoints = ["architecture", "planning", "phase_complete"]
 
 [tools]

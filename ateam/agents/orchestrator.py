@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -51,12 +52,14 @@ class Orchestrator:
         self.project_path = (config.workspace_dir / project_name).resolve()
         self.checkpoint_callback = checkpoint_callback
 
-        # Initialize LLM client
+        # Initialize LLM client (event_bus set later after project_path is set up)
         self.llm_client = OpenRouterClient(
             api_key=config.openrouter_api_key,
             base_url=config.api_base_url,
             default_model=config.default_model,
+            min_request_interval=config.min_request_interval,
         )
+        # event_bus will be set after project_path is created
 
         # Initialize tool registry
         self.tool_registry = ToolRegistry()
@@ -86,6 +89,7 @@ class Orchestrator:
 
         # Initialize event bus now that project_path exists
         self.event_bus = EventBus(self.project_path)
+        self.llm_client.event_bus = self.event_bus
 
         # Load or create state
         state = ProjectState.load(self.project_path)
@@ -155,10 +159,8 @@ class Orchestrator:
                 "architecture",
                 "Architecture documents are ready for review.",
                 [
-                    self.project_path / ".ateam" / "architecture.md",
+                    self.project_path / ".ateam" / "blueprint.md",
                     self.project_path / ".ateam" / "standards.md",
-                    self.project_path / ".ateam" / "design.md",
-                    self.project_path / ".ateam" / "tech_stack.md",
                 ],
             )
             if not approved:
@@ -228,7 +230,7 @@ class Orchestrator:
             )
 
     # Required outputs from each pipeline stage (minimal — only truly essential files)
-    ARCHITECT_REQUIRED_FILES = ["architecture.md"]
+    ARCHITECT_REQUIRED_FILES = ["blueprint.md", "standards.md"]
     PLANNER_REQUIRED_FILES = ["plan.json"]
 
     async def _run_architecture(self, state: ProjectState, user_request: str) -> None:
@@ -282,9 +284,8 @@ class Orchestrator:
         state.save(self.project_path)
 
     async def _run_planning(self, state: ProjectState) -> None:
-        """Run the planner agent."""
+        """Run the planner agent with retry on validation failure."""
         console.print("\n[bold cyan]>>> Phase: Planning[/bold cyan]")
-        console.print("Running Planner agent...")
 
         planner = PlannerAgent(
             llm_client=self.llm_client,
@@ -294,44 +295,56 @@ class Orchestrator:
             event_bus=self.event_bus,
         )
 
-        result = await planner.run()
+        max_retries = self.config.max_planner_retries
+        last_error: str | None = None
 
-        console.print(f"[green]Planner completed.[/green] "
-                      f"({result.tool_calls_made} tool calls, {result.total_tokens} tokens)")
+        for attempt in range(1, max_retries + 1):
+            console.print(f"Running Planner agent... (attempt {attempt}/{max_retries})")
 
-        # ── Validate planner output ──
-        missing = self._validate_stage_outputs(self.PLANNER_REQUIRED_FILES)
-        if missing:
-            console.print(
-                f"[bold red]Planner failed to produce required files: {missing}[/bold red]"
-            )
-            if self.event_bus:
-                self.event_bus.emit("validation.failed", stage="planner", missing_files=missing)
-            # Retry once
-            console.print("[yellow]Retrying planner...[/yellow]")
             result = await planner.run()
+
+            console.print(f"[green]Planner completed.[/green] "
+                          f"({result.tool_calls_made} tool calls, {result.total_tokens} tokens)")
+
+            # ── Validate planner output files exist ──
             missing = self._validate_stage_outputs(self.PLANNER_REQUIRED_FILES)
             if missing:
                 console.print(
-                    f"[bold red]Planner still missing files after retry: "
-                    f"{missing}. Failing.[/bold red]"
+                    f"[bold red]Planner failed to produce required files: {missing}[/bold red]"
                 )
+                if self.event_bus:
+                    self.event_bus.emit("validation.failed", stage="planner", missing_files=missing)
+                last_error = f"Missing files: {', '.join(missing)}"
+                if attempt < max_retries:
+                    console.print(f"[yellow]Retrying planner ({attempt + 1}/{max_retries})...[/yellow]")
+                    continue
+                console.print(f"[bold red]Planner failed after {max_retries} attempts. Failing.[/bold red]")
                 state.transition("failed")
                 state.save(self.project_path)
                 return
 
-        # Parse the plan into state
-        try:
-            phases = PlannerAgent.parse_plan(self.project_path)
-            if not phases:
-                raise ValueError("Plan parsed but contains zero phases")
-            state.phases = phases
-            self._print_plan(phases)
-        except Exception as e:
-            console.print(f"[red]Error parsing plan: {e}[/red]")
-            state.transition("failed")
-            state.save(self.project_path)
-            return
+            # ── Parse and validate plan.json ──
+            try:
+                phases = PlannerAgent.parse_plan(self.project_path)
+                if not phases:
+                    raise ValueError("Plan parsed but contains zero phases")
+                state.phases = phases
+                self._print_plan(phases)
+                # Success — break out of retry loop
+                break
+            except (ValueError, FileNotFoundError) as e:
+                last_error = str(e)
+                console.print(f"[bold red]Plan validation failed:[/bold red] {e}")
+                if self.event_bus:
+                    self.event_bus.emit("validation.failed", stage="planner", error=last_error)
+                if attempt < max_retries:
+                    console.print(f"[yellow]Retrying planner with feedback ({attempt + 1}/{max_retries})...[/yellow]")
+                    # Re-run planner — it will see the existing (invalid) plan.json and can fix it
+                    continue
+                console.print(f"[bold red]Planner failed after {max_retries} attempts. Failing.[/bold red]")
+                state.transition("failed")
+                state.save(self.project_path)
+                return
 
         state.transition("plan_review")
         state.save(self.project_path)
@@ -399,6 +412,20 @@ class Orchestrator:
         state.transition("completed")
         state.save(self.project_path)
 
+    def _get_all_ready_tasks(self, phase: "Phase", state: ProjectState) -> list["Task"]:
+        """Return all pending tasks whose dependencies are satisfied."""
+        ready = []
+        for task in phase.tasks:
+            if task.status != "pending":
+                continue
+            deps_done = all(
+                self._task_completed_in_state(state, dep_id)
+                for dep_id in task.dependencies
+            )
+            if deps_done:
+                ready.append(task)
+        return ready
+
     async def _execute_phase_full(
         self,
         state: ProjectState,
@@ -406,76 +433,188 @@ class Orchestrator:
         worker: WorkerAgent,
         reviewer: ReviewerAgent,
     ) -> None:
-        """Execute all tasks in a phase with per-task worker→reviewer loop (or no review in yolo)."""
-        pending = [t for t in phase.tasks if t.status == "pending"]
-        while pending:
-            # Pick the first task whose dependencies are all completed
-            ready = self._next_ready_task(phase)
-            if ready is None:
-                # Check for deadlock
-                still_pending = [t for t in phase.tasks if t.status == "pending"]
-                if still_pending:
-                    stuck_ids = [t.id for t in still_pending]
-                    stuck_deps = {
-                        t.id: [d for d in t.dependencies if d not in
-                               {x.id for x in phase.tasks if x.status == "completed"}]
-                        for t in still_pending
-                    }
-                    logger.error(
-                        "DEADLOCK in phase '%s': %d tasks stuck with unresolvable "
-                        "dependencies. Stuck: %s  Missing deps: %s",
-                        phase.name, len(still_pending), stuck_ids, stuck_deps,
+        """Execute all tasks in a phase with per-task worker→reviewer loop (or no review in yolo).
+
+        When config.max_parallel > 1, runs independent tasks concurrently.
+        """
+        max_parallel = self.config.max_parallel
+
+        while True:
+            if max_parallel > 1:
+                # Parallel mode: get all ready tasks, run up to max_parallel at once
+                ready_tasks = self._get_all_ready_tasks(phase, state)
+                if not ready_tasks:
+                    # Check for deadlock
+                    still_pending = [t for t in phase.tasks if t.status == "pending"]
+                    if still_pending:
+                        stuck_ids = [t.id for t in still_pending]
+                        stuck_deps = {
+                            t.id: [d for d in t.dependencies if not
+                                   self._task_completed_in_state(state, d)]
+                            for t in still_pending
+                        }
+                        logger.error(
+                            "DEADLOCK in phase '%s': %d tasks stuck. Stuck: %s  Missing deps: %s",
+                            phase.name, len(still_pending), stuck_ids, stuck_deps,
+                        )
+                        if self.event_bus:
+                            self.event_bus.emit(
+                                "phase.deadlock",
+                                phase_id=phase.id,
+                                phase_name=phase.name,
+                                stuck_tasks=stuck_ids,
+                                missing_deps=stuck_deps,
+                            )
+                        for t in still_pending:
+                            t.status = "rejected"
+                            t.review_feedback = (
+                                f"DEADLOCK: task blocked by unresolvable dependencies: "
+                                f"{stuck_deps.get(t.id, [])}"
+                            )
+                        phase.status = "failed"
+                        state.transition("failed")
+                        state.save(self.project_path)
+                        console.print(
+                            f"[bold red]DEADLOCK:[/bold red] {len(still_pending)} task(s) in "
+                            f"phase '{phase.name}' have unresolvable dependencies. "
+                            f"Skipped IDs: {stuck_ids}"
+                        )
+                    break
+
+                # Take up to max_parallel tasks
+                batch = ready_tasks[:max_parallel]
+                if len(batch) > 1:
+                    console.print(
+                        f"\n  [dim]Running {len(batch)} tasks in parallel (max {max_parallel})[/dim]"
                     )
-                    if self.event_bus:
-                        self.event_bus.emit(
-                            "phase.deadlock",
-                            phase_id=phase.id,
-                            phase_name=phase.name,
-                            stuck_tasks=stuck_ids,
-                            missing_deps=stuck_deps,
+
+                if self.config.review_mode == "none":
+                    # Yolo parallel — run workers only, auto-approve
+                    for t in batch:
+                        t.status = "in_progress"
+                        t.attempts = 1
+                        if self.event_bus:
+                            self.event_bus.task_started(t.id, t.title, t.agent_type, 1)
+                    state.save(self.project_path)
+
+                    completed_summary = self._completed_tasks_summary(state)
+                    results = await asyncio.gather(
+                        *[worker.run(task=t, completed_tasks_summary=completed_summary, retry_feedback=None)
+                          for t in batch],
+                        return_exceptions=True,
+                    )
+
+                    for t, result in zip(batch, results):
+                        if isinstance(result, Exception):
+                            t.status = "rejected"
+                            t.review_feedback = f"Worker error: {result}"
+                            if self.event_bus:
+                                self.event_bus.task_rejected(t.id, t.title, str(result))
+                        else:
+                            t.status = "completed"
+                            if self.event_bus:
+                                self.event_bus.task_completed(t.id, t.title)
+                    state.save(self.project_path)
+                else:
+                    # Full review parallel — run workers, then review each
+                    for t in batch:
+                        t.status = "in_progress"
+                        t.attempts = 1
+                        if self.event_bus:
+                            self.event_bus.task_started(t.id, t.title, t.agent_type, 1)
+                    state.save(self.project_path)
+
+                    completed_summary = self._completed_tasks_summary(state)
+                    results = await asyncio.gather(
+                        *[worker.run(task=t, completed_tasks_summary=completed_summary, retry_feedback=None)
+                          for t in batch],
+                        return_exceptions=True,
+                    )
+
+                    # Review each task sequentially
+                    for t, result in zip(batch, results):
+                        if isinstance(result, Exception):
+                            t.status = "rejected"
+                            t.review_feedback = f"Worker error: {result}"
+                            if self.event_bus:
+                                self.event_bus.task_rejected(t.id, t.title, str(result))
+                        else:
+                            # Review this task individually
+                            review_result = await reviewer.run(t)
+                            if review_result.approved:
+                                t.status = "completed"
+                                if self.event_bus:
+                                    self.event_bus.task_completed(t.id, t.title)
+                            else:
+                                t.review_feedback = review_result.feedback
+                                if self.event_bus:
+                                    self.event_bus.task_rejected(t.id, t.title, review_result.feedback)
+                    state.save(self.project_path)
+            else:
+                # Sequential mode (existing behavior, unchanged)
+                ready = self._next_ready_task(phase)
+                if ready is None:
+                    # Check for deadlock
+                    still_pending = [t for t in phase.tasks if t.status == "pending"]
+                    if still_pending:
+                        stuck_ids = [t.id for t in still_pending]
+                        stuck_deps = {
+                            t.id: [d for d in t.dependencies if d not in
+                                   {x.id for x in phase.tasks if x.status == "completed"}]
+                            for t in still_pending
+                        }
+                        logger.error(
+                            "DEADLOCK in phase '%s': %d tasks stuck with unresolvable "
+                            "dependencies. Stuck: %s  Missing deps: %s",
+                            phase.name, len(still_pending), stuck_ids, stuck_deps,
                         )
-                    # Mark stuck tasks as failed — don't pretend they completed
-                    for t in still_pending:
-                        t.status = "rejected"
-                        t.review_feedback = (
-                            f"DEADLOCK: task blocked by unresolvable dependencies: "
-                            f"{stuck_deps.get(t.id, [])}"
+                        if self.event_bus:
+                            self.event_bus.emit(
+                                "phase.deadlock",
+                                phase_id=phase.id,
+                                phase_name=phase.name,
+                                stuck_tasks=stuck_ids,
+                                missing_deps=stuck_deps,
+                            )
+                        for t in still_pending:
+                            t.status = "rejected"
+                            t.review_feedback = (
+                                f"DEADLOCK: task blocked by unresolvable dependencies: "
+                                f"{stuck_deps.get(t.id, [])}"
+                            )
+                        phase.status = "failed"
+                        state.transition("failed")
+                        state.save(self.project_path)
+                        console.print(
+                            f"[bold red]DEADLOCK:[/bold red] {len(still_pending)} task(s) in "
+                            f"phase '{phase.name}' have unresolvable dependencies. "
+                            f"Skipped IDs: {stuck_ids}"
                         )
-                    phase.status = "failed"
-                    state.transition("failed")
+                    return
+
+                if self.config.review_mode == "none":
+                    # Yolo — run worker only, auto-approve
+                    ready.status = "in_progress"
+                    ready.attempts = 1
                     state.save(self.project_path)
                     console.print(
-                        f"[bold red]DEADLOCK:[/bold red] {len(still_pending)} task(s) in "
-                        f"phase '{phase.name}' have unresolvable dependencies. "
-                        f"Skipped IDs: {stuck_ids}"
+                        f"\n  [cyan]Task:[/cyan] {ready.title} [dim](yolo — no review)[/dim]"
                     )
-                return
-
-            if self.config.review_mode == "none":
-                # Yolo — run worker only, auto-approve
-                ready.status = "in_progress"
-                ready.attempts = 1
-                state.save(self.project_path)
-                console.print(
-                    f"\n  [cyan]Task:[/cyan] {ready.title} [dim](yolo — no review)[/dim]"
-                )
-                if self.event_bus:
-                    self.event_bus.task_started(ready.id, ready.title, ready.agent_type, 1)
-                completed_summary = self._completed_tasks_summary(state)
-                await worker.run(
-                    task=ready,
-                    completed_tasks_summary=completed_summary,
-                    retry_feedback=None,
-                )
-                ready.status = "completed"
-                if self.event_bus:
-                    self.event_bus.task_completed(ready.id, ready.title)
-                state.save(self.project_path)
-            else:
-                # Full review — worker → reviewer loop
-                await self._execute_task(state, ready, worker, reviewer)
-
-            pending = [t for t in phase.tasks if t.status == "pending"]
+                    if self.event_bus:
+                        self.event_bus.task_started(ready.id, ready.title, ready.agent_type, 1)
+                    completed_summary = self._completed_tasks_summary(state)
+                    await worker.run(
+                        task=ready,
+                        completed_tasks_summary=completed_summary,
+                        retry_feedback=None,
+                    )
+                    ready.status = "completed"
+                    if self.event_bus:
+                        self.event_bus.task_completed(ready.id, ready.title)
+                    state.save(self.project_path)
+                else:
+                    # Full review — worker → reviewer loop
+                    await self._execute_task(state, ready, worker, reviewer)
 
     async def _execute_phase_milestones(
         self,
@@ -728,10 +867,17 @@ class Orchestrator:
         """Detect obvious framework/version/style drift across docs, plan, and state."""
         sources: list[tuple[str, str]] = []
         ateam_dir = self.project_path / ".ateam"
-        for name in ["architecture.md", "standards.md", "design.md", "tech_stack.md"]:
+        # New 2-file format
+        for name in ["blueprint.md", "standards.md"]:
             path = ateam_dir / name
             if path.exists():
                 sources.append((name, path.read_text(encoding="utf-8")))
+        # Backward compat: old 4-file format
+        if not (ateam_dir / "blueprint.md").exists():
+            for name in ["architecture.md", "design.md", "tech_stack.md"]:
+                path = ateam_dir / name
+                if path.exists():
+                    sources.append((name, path.read_text(encoding="utf-8")))
 
         plan_file = ateam_dir / "plan.json"
         if plan_file.exists():
